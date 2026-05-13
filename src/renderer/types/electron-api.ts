@@ -64,6 +64,10 @@ export type MarkdownChatResponse = {
   patch?: MarkdownChatPatch;
 };
 
+/** Same payload/response as markdown chat; main uses a PlantUML-focused system prompt. */
+export type UmlChatRequest = MarkdownChatRequest;
+export type UmlChatResponse = MarkdownChatResponse;
+
 export type WorkspaceChatRequest = {
   sessionKey: string;
   activeFile: string;
@@ -141,6 +145,7 @@ export type ElectronApi = {
     { ok: true; data: ArrayBuffer } | { ok: false; error: string }
   >;
   markdownChatSend?: (req: MarkdownChatRequest) => Promise<MarkdownChatResponse>;
+  umlChatSend?: (req: UmlChatRequest) => Promise<UmlChatResponse>;
   workspaceChatSend?: (req: WorkspaceChatRequest) => Promise<WorkspaceChatResponse>;
   /** Subscribe to incremental assistant text during `markdownChatSend` / `workspaceChatSend` when `streamId` is sent. */
   subscribeAiChatStream?: (listener: (payload: AiChatStreamPayload) => void) => () => void;

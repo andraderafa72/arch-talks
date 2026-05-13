@@ -1,0 +1,40 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #fefefe;
+  color: #111827;
+}
+
+.theme-light {
+  background: #fefefe;
+}
+
+.theme-dark {
+  background: #0b0e14;
+  color: #f4f4f5;
+}

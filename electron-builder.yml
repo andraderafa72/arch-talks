@@ -1,0 +1,13 @@
+appId: com.ragtalks.frontend
+productName: RAG Talks
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+extraResources:
+  - from: resources/tectonic
+    to: tectonic
+    filter:
+      - "**/*"

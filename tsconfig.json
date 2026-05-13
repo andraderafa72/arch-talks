@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@orchestra-ai-runtime": ["../orchestra-ai-runtime/src/index.ts"],
+      "@orchestra-ai-runtime/*": ["../orchestra-ai-runtime/src/*"]
+    }
+  },
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

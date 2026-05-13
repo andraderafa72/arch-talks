@@ -1,8 +1,17 @@
-import Editor from "@monaco-editor/react";
+import Editor, { DiffEditor } from "@monaco-editor/react";
 import type { Monaco } from "@monaco-editor/react";
 import { Pencil, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
+import { Button } from "@/components/ui/button";
+
+export type AiDiffReviewToolbar = {
+  proposalId: string;
+  original: string;
+  modified: string;
+  onKeep: () => void;
+  onUndo: () => void;
+};
 
 type EditorPanelProps = {
   file: string;
@@ -22,6 +31,10 @@ type EditorPanelProps = {
   onSaveActiveFile?: () => void;
   /** New file / tab (Ctrl/Cmd+N when Monaco is focused). */
   onNewFile?: () => void;
+  /** When set, the main area shows a read-only diff instead of the editor. */
+  aiDiffReview?: AiDiffReviewToolbar | null;
+  /** When not in diff review, optional one-step undo for the last applied AI edit. */
+  appliedAiUndo?: { onUndo: () => void } | null;
 };
 
 const languageForFile = (file: string) => {
@@ -50,6 +63,8 @@ export function EditorPanel({
   onRenameTab,
   onSaveActiveFile,
   onNewFile,
+  aiDiffReview,
+  appliedAiUndo,
 }: EditorPanelProps) {
   const showTabBar = openTabs !== undefined;
   const tabList = openTabs ?? [file];
@@ -61,6 +76,7 @@ export function EditorPanel({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const diffEditorRef = useRef<MonacoEditor.IStandaloneDiffEditor | null>(null);
   const saveHandlerRef = useRef(onSaveActiveFile);
   const newFileHandlerRef = useRef(onNewFile);
 
@@ -70,15 +86,28 @@ export function EditorPanel({
   }, [onSaveActiveFile, onNewFile]);
 
   useEffect(() => {
-    if (!containerRef.current || !editorRef.current) return;
+    if (!containerRef.current) return;
 
     const observer = new ResizeObserver(() => {
       editorRef.current?.layout();
+      diffEditorRef.current?.layout();
     });
     observer.observe(containerRef.current);
 
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!aiDiffReview) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        aiDiffReview.onUndo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [aiDiffReview]);
 
   const handleMount = (editor: MonacoEditor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorRef.current = editor;
@@ -94,6 +123,16 @@ export function EditorPanel({
       });
     }
   };
+
+  const handleDiffMount = (editor: MonacoEditor.IStandaloneDiffEditor, _monaco: Monaco) => {
+    diffEditorRef.current = editor;
+    editor.layout();
+  };
+
+  const monacoTheme = theme === "dark" ? "vs-dark" : "vs-light";
+  const editorLanguage = language ?? languageForFile(file);
+
+  const showAppliedUndoBar = !aiDiffReview && appliedAiUndo;
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
@@ -158,22 +197,79 @@ export function EditorPanel({
         })}
       </div>
       ) : null}
+
+      {aiDiffReview ? (
+        <div
+          className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900/80"
+          role="toolbar"
+          aria-label="Revisão da alteração sugerida pela IA"
+        >
+          <p className="text-xs text-zinc-600 dark:text-zinc-400">
+            Revisão da IA — original à esquerda, proposta à direita. <kbd className="rounded border border-zinc-300 px-1 dark:border-zinc-600">Esc</kbd> descarta.
+          </p>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={aiDiffReview.onUndo}>
+              Descartar
+            </Button>
+            <Button type="button" size="sm" onClick={aiDiffReview.onKeep}>
+              Manter
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {showAppliedUndoBar ? (
+        <div
+          className="flex shrink-0 items-center justify-end gap-2 border-b border-zinc-200 bg-amber-50/80 px-2 py-1.5 dark:border-zinc-700 dark:bg-amber-950/30"
+          role="toolbar"
+          aria-label="Desfazer alteração da IA"
+        >
+          <Button type="button" variant="secondary" size="sm" onClick={appliedAiUndo.onUndo}>
+            Desfazer IA
+          </Button>
+        </div>
+      ) : null}
+
       <div ref={containerRef} className="min-h-0 min-w-0 flex-1">
-        <Editor
-          height="100%"
-          path={activeTabPath}
-          language={language ?? languageForFile(file)}
-          value={value}
-          theme={theme === "dark" ? "vs-dark" : "vs-light"}
-          onChange={(next) => onChange(next ?? "")}
-          onMount={handleMount}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 14,
-            wordWrap: "on",
-            automaticLayout: true,
-          }}
-        />
+        {aiDiffReview ? (
+          <DiffEditor
+            key={aiDiffReview.proposalId}
+            height="100%"
+            width="100%"
+            language={editorLanguage}
+            theme={monacoTheme}
+            original={aiDiffReview.original}
+            modified={aiDiffReview.modified}
+            originalModelPath={`${aiDiffReview.proposalId}/original`}
+            modifiedModelPath={`${aiDiffReview.proposalId}/modified`}
+            onMount={handleDiffMount}
+            options={{
+              readOnly: true,
+              renderSideBySide: true,
+              minimap: { enabled: false },
+              wordWrap: "on",
+              fontSize: 14,
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+            }}
+          />
+        ) : (
+          <Editor
+            height="100%"
+            path={activeTabPath}
+            language={editorLanguage}
+            value={value}
+            theme={monacoTheme}
+            onChange={(next) => onChange(next ?? "")}
+            onMount={handleMount}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 14,
+              wordWrap: "on",
+              automaticLayout: true,
+            }}
+          />
+        )}
       </div>
     </div>
   );

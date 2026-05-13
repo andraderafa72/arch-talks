@@ -1,4 +1,5 @@
 import { MessageCircle, Trash2, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { ChatAiControls } from "@/components/chat/ChatAiControls";
 import { ChatMessageMarkdown } from "@/components/chat/ChatMessageMarkdown";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,16 @@ export function MarkdownToPdfChatPopover() {
     closeChat,
     sendChatMessage,
     clearActiveFileChat,
+    isSending,
+    streamingAssistantText,
   } = useMarkdownToPdfChatContext();
+
+  const streamEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isSending && streamingAssistantText == null) return;
+    streamEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [isSending, streamingAssistantText]);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[49]">
@@ -65,7 +75,7 @@ export function MarkdownToPdfChatPopover() {
                 size="sm"
                 className="h-7 w-7 shrink-0"
                 onClick={clearActiveFileChat}
-                disabled={!activeFile || activeFileChat.length === 0}
+                disabled={!activeFile || activeFileChat.length === 0 || isSending}
                 aria-label="Limpar conversa do arquivo atual"
                 title="Limpar conversa"
               >
@@ -90,12 +100,34 @@ export function MarkdownToPdfChatPopover() {
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {activeFile
-                    ? "Sem conversa para este arquivo ainda. Envie uma mensagem para iniciar."
-                    : "Abra ou crie um arquivo para iniciar uma conversa."}
-                </p>
+                !isSending && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {activeFile
+                      ? "Sem conversa para este arquivo ainda. Envie uma mensagem para iniciar."
+                      : "Abra ou crie um arquivo para iniciar uma conversa."}
+                  </p>
+                )
               )}
+              {streamingAssistantText !== null ? (
+                <div
+                  className="mb-2 rounded-md border border-dashed border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800/60"
+                  aria-busy={isSending}
+                  aria-live="polite"
+                >
+                  {streamingAssistantText.length > 0 ? (
+                    <ChatMessageMarkdown content={streamingAssistantText} variant="assistant" />
+                  ) : (
+                    <div className="space-y-2 py-1">
+                      <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                        Gerando resposta…
+                      </p>
+                      <div className="h-2 w-full animate-pulse rounded bg-zinc-200 dark:bg-zinc-600" />
+                      <div className="h-2 w-4/5 animate-pulse rounded bg-zinc-200 dark:bg-zinc-600" />
+                    </div>
+                  )}
+                </div>
+              ) : null}
+              <div ref={streamEndRef} />
             </ScrollArea>
             <div className="border-t border-zinc-200 px-3 py-2 dark:border-zinc-700">
               <p className="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -105,7 +137,7 @@ export function MarkdownToPdfChatPopover() {
                 selection={activeAiSelection}
                 onSelectionChange={setActiveAiSelection}
                 placeholder="Descreva a alteracao desejada..."
-                disabled={!activeFile}
+                disabled={!activeFile || isSending}
                 onSubmit={sendChatMessage}
               />
             </div>

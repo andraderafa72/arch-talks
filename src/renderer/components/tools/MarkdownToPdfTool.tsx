@@ -4,7 +4,6 @@ import ReactMarkdown from "react-markdown";
 import { EditorPanel } from "@/components/editor/EditorPanel";
 import { MarkdownToPdfChatPopover } from "@/components/tools/MarkdownToPdfChatPopover";
 import { ToolEditorHeader } from "@/components/tools/ToolEditorHeader";
-import { AiEditProposalDiffDialog } from "@/components/tools/AiEditProposalDiffDialog";
 import { ToolSplitLayout } from "@/components/tools/ToolSplitLayout";
 import { UnsavedTabCloseDialog } from "@/components/tools/UnsavedTabCloseDialog";
 import {
@@ -21,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { MarkdownToPdfChatProvider } from "@/contexts/MarkdownToPdfChatContext";
 import { MarkdownToPdfToolProvider, useMarkdownToPdfToolContext } from "@/contexts/MarkdownToPdfToolContext";
 import { usePdfDocumentExport } from "@/hooks/usePdfDocumentExport";
-import type { AiEditProposal } from "@/types";
+import type { AiEditProposal, AppliedAiEdit } from "@/types";
 
 type MarkdownToPdfToolProps = {
   theme: MarkdownToPdfTheme;
@@ -60,20 +59,36 @@ function MarkdownToPdfToolContent({ theme }: MarkdownToPdfToolProps) {
 
   const { exportPdf, exportError, exporting } = usePdfDocumentExport();
   const [pendingAiProposal, setPendingAiProposal] = useState<AiEditProposal | null>(null);
+  const [lastAppliedAiEdit, setLastAppliedAiEdit] = useState<AppliedAiEdit | null>(null);
 
   const handlePatchReceived = useCallback((proposal: AiEditProposal) => {
+    setLastAppliedAiEdit(null);
     setPendingAiProposal(proposal);
   }, []);
 
-  const applyAiProposal = useCallback(() => {
+  const keepAiProposal = useCallback(() => {
     if (!pendingAiProposal) return;
+    const applied: AppliedAiEdit = {
+      id: crypto.randomUUID(),
+      file: pendingAiProposal.file,
+      previousContent: pendingAiProposal.originalContent,
+      appliedPatch: pendingAiProposal.patch,
+      timestamp: new Date().toISOString(),
+    };
     updateActiveContent(pendingAiProposal.proposedContent);
     setPendingAiProposal(null);
+    setLastAppliedAiEdit(applied);
   }, [pendingAiProposal, updateActiveContent]);
 
-  const dismissAiProposal = useCallback(() => {
+  const discardAiProposal = useCallback(() => {
     setPendingAiProposal(null);
   }, []);
+
+  const undoAppliedAiEdit = useCallback(() => {
+    if (!lastAppliedAiEdit) return;
+    updateActiveContent(lastAppliedAiEdit.previousContent);
+    setLastAppliedAiEdit(null);
+  }, [lastAppliedAiEdit, updateActiveContent]);
   const previewComponents = useMemo(() => createDocumentMarkdownComponents(previewPalette), [previewPalette]);
   const printComponents = useMemo(() => createDocumentMarkdownComponents(printPalette), [printPalette]);
 
@@ -158,6 +173,24 @@ function MarkdownToPdfToolContent({ theme }: MarkdownToPdfToolProps) {
                   onRenameTab={renameTab}
                   onSaveActiveFile={() => void saveActiveFile()}
                   onNewFile={addNewMarkdownFile}
+                  aiDiffReview={
+                    pendingAiProposal && pendingAiProposal.file === activeFile
+                      ? {
+                          proposalId: pendingAiProposal.id,
+                          original: pendingAiProposal.originalContent,
+                          modified: pendingAiProposal.proposedContent,
+                          onKeep: keepAiProposal,
+                          onUndo: discardAiProposal,
+                        }
+                      : null
+                  }
+                  appliedAiUndo={
+                    !pendingAiProposal &&
+                    lastAppliedAiEdit &&
+                    lastAppliedAiEdit.file === activeFile
+                      ? { onUndo: undoAppliedAiEdit }
+                      : null
+                  }
                 />
               ) : (
                 <div className="flex h-full items-center justify-center px-6">
@@ -218,14 +251,6 @@ function MarkdownToPdfToolContent({ theme }: MarkdownToPdfToolProps) {
         }
       />
       {printPortal}
-      {pendingAiProposal ? (
-        <AiEditProposalDiffDialog
-          proposal={pendingAiProposal}
-          theme={theme}
-          onApply={applyAiProposal}
-          onDismiss={dismissAiProposal}
-        />
-      ) : null}
       <MarkdownToPdfChatPopover />
       <UnsavedTabCloseDialog
         filePath={pendingClosePath}

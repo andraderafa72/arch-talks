@@ -44,12 +44,19 @@ export type MarkdownChatPatch = {
   changes: MarkdownChatChange[];
 };
 
+export type AiChatStreamPayload = {
+  streamId: string;
+  text: string;
+};
+
 export type MarkdownChatRequest = {
   sessionKey: string;
   activeFile: string;
   fileContent: string;
   prompt: string;
   aiSelection?: LocalAiSelection;
+  /** When set, main process sends incremental `aiChat:stream` events with accumulated assistant text. */
+  streamId?: string;
 };
 
 export type MarkdownChatResponse = {
@@ -63,6 +70,7 @@ export type WorkspaceChatRequest = {
   files: Record<string, string>;
   prompt: string;
   aiSelection?: LocalAiSelection;
+  streamId?: string;
 };
 
 export type WorkspaceChatResponse = {
@@ -134,6 +142,8 @@ export type ElectronApi = {
   >;
   markdownChatSend?: (req: MarkdownChatRequest) => Promise<MarkdownChatResponse>;
   workspaceChatSend?: (req: WorkspaceChatRequest) => Promise<WorkspaceChatResponse>;
+  /** Subscribe to incremental assistant text during `markdownChatSend` / `workspaceChatSend` when `streamId` is sent. */
+  subscribeAiChatStream?: (listener: (payload: AiChatStreamPayload) => void) => () => void;
   aiListLocalOptions?: () => Promise<LocalAiOptions>;
 };
 

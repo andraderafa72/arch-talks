@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, List, Pencil, Plus, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -44,8 +44,26 @@ export function ChatPanel({
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
+  const workspaceStreamIdRef = useRef<string | null>(null);
+  const [workspaceStream, setWorkspaceStream] = useState<{ streamId: string; text: string } | null>(null);
+  const workspaceStreamEndRef = useRef<HTMLDivElement | null>(null);
 
   const activeTab = conversationTabs.find((tab) => tab.id === activeConversationTabId) ?? conversationTabs[0];
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.electronApi?.subscribeAiChatStream) return;
+    return window.electronApi.subscribeAiChatStream((payload) => {
+      if (payload.streamId !== workspaceStreamIdRef.current) return;
+      setWorkspaceStream((prev) =>
+        prev && prev.streamId === payload.streamId ? { ...prev, text: payload.text } : prev,
+      );
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceStream) return;
+    workspaceStreamEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [workspaceStream?.text]);
 
   const startRename = (tabId?: string) => {
     const target = tabId
@@ -108,21 +126,30 @@ export function ChatPanel({
           });
           return;
         }
-        const response = await api.workspaceChatSend({
-          sessionKey: activeConversationTabId,
-          activeFile,
-          files,
-          prompt: promptText,
-          aiSelection,
-        });
-        onMessage({
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: response.reply || "(sem resposta)",
-          timestamp: new Date().toISOString(),
-        });
-        if (response.patch) {
-          onPatchReceived(response.patch as Patch);
+        const streamId = crypto.randomUUID();
+        workspaceStreamIdRef.current = streamId;
+        setWorkspaceStream({ streamId, text: "" });
+        try {
+          const response = await api.workspaceChatSend({
+            sessionKey: activeConversationTabId,
+            activeFile,
+            files,
+            prompt: promptText,
+            aiSelection,
+            streamId,
+          });
+          onMessage({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: response.reply || "(sem resposta)",
+            timestamp: new Date().toISOString(),
+          });
+          if (response.patch) {
+            onPatchReceived(response.patch as Patch);
+          }
+        } finally {
+          workspaceStreamIdRef.current = null;
+          setWorkspaceStream(null);
         }
         return;
       }
@@ -328,6 +355,25 @@ export function ChatPanel({
               />
             </div>
           ))}
+          {workspaceStream ? (
+            <div
+              className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800/60"
+              aria-live="polite"
+            >
+              {workspaceStream.text.length > 0 ? (
+                <ChatMessageMarkdown content={workspaceStream.text} variant="assistant" />
+              ) : (
+                <div className="space-y-2 py-1">
+                  <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    {locale === "pt" ? "Gerando resposta…" : "Generating response…"}
+                  </p>
+                  <div className="h-2 w-full animate-pulse rounded bg-zinc-200 dark:bg-zinc-600" />
+                  <div className="h-2 w-4/5 animate-pulse rounded bg-zinc-200 dark:bg-zinc-600" />
+                </div>
+              )}
+            </div>
+          ) : null}
+          <div ref={workspaceStreamEndRef} />
         </div>
       </ScrollArea>
       <div className="border-t border-zinc-200 bg-[#fefefe] p-3 dark:border-zinc-700 dark:bg-zinc-950">

@@ -1,5 +1,14 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { applyPatch } from "@/lib/patchEngine";
 import type { AiEditProposal, Patch } from "@/types";
 import type { LocalAiSelection } from "@/types/electron-api";
@@ -17,6 +26,8 @@ type MarkdownToPdfChatContextValue = {
   chatPrompt: string;
   activeFileChat: MarkdownToPdfChatMessage[];
   isSending: boolean;
+  /** Accumulated assistant text during the current request; `null` when idle. */
+  streamingAssistantText: string | null;
   chatError: string | null;
   activeAiSelection: LocalAiSelection | undefined;
   setActiveAiSelection: (selection: LocalAiSelection | undefined) => void;
@@ -62,13 +73,25 @@ export function MarkdownToPdfChatProvider({
   const [chatPrompt, setChatPrompt] = useState("");
   const [chatByFile, setChatByFile] = useState<Record<string, MarkdownToPdfChatMessage[]>>({});
   const [isSending, setIsSending] = useState(false);
+  const [streamingAssistantText, setStreamingAssistantText] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [activeAiSelection, setActiveAiSelection] = useState<LocalAiSelection | undefined>(undefined);
+  const activeStreamIdRef = useRef<string | null>(null);
 
   const activeFileChat = useMemo(
     () => (activeFile ? (chatByFile[activeFile] ?? []) : []),
     [activeFile, chatByFile],
   );
+
+  useEffect(() => {
+    const api = resolveElectronApi();
+    if (!api?.subscribeAiChatStream) return;
+    return api.subscribeAiChatStream((payload) => {
+      if (payload.streamId === activeStreamIdRef.current) {
+        setStreamingAssistantText(payload.text);
+      }
+    });
+  }, []);
 
   const toggleChatOpen = useCallback(() => {
     setIsChatOpen((open) => !open);
@@ -118,6 +141,9 @@ export function MarkdownToPdfChatProvider({
     const snapshotFile = activeFile;
     const snapshotContent = fileContent;
     const sessionKey = `markdown-to-pdf:${snapshotFile}`;
+    const streamId = crypto.randomUUID();
+    activeStreamIdRef.current = streamId;
+    setStreamingAssistantText("");
 
     try {
       const response = await api.markdownChatSend({
@@ -126,7 +152,10 @@ export function MarkdownToPdfChatProvider({
         fileContent: snapshotContent,
         prompt: trimmed,
         aiSelection: activeAiSelection,
+        streamId,
       });
+      activeStreamIdRef.current = null;
+      setStreamingAssistantText(null);
       const assistantMessage: MarkdownToPdfChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -159,6 +188,8 @@ export function MarkdownToPdfChatProvider({
         }
       }
     } catch (err: unknown) {
+      activeStreamIdRef.current = null;
+      setStreamingAssistantText(null);
       const msg = err instanceof Error ? err.message : "Erro ao contatar IA local.";
       setChatError(msg);
       const errMessage: MarkdownToPdfChatMessage = {
@@ -185,6 +216,8 @@ export function MarkdownToPdfChatProvider({
       return next;
     });
     setChatError(null);
+    activeStreamIdRef.current = null;
+    setStreamingAssistantText(null);
   }, [activeFile]);
 
   useEffect(() => {
@@ -203,6 +236,7 @@ export function MarkdownToPdfChatProvider({
       chatPrompt,
       activeFileChat,
       isSending,
+      streamingAssistantText,
       chatError,
       activeAiSelection,
       setActiveAiSelection,
@@ -218,6 +252,7 @@ export function MarkdownToPdfChatProvider({
       chatPrompt,
       activeFileChat,
       isSending,
+      streamingAssistantText,
       chatError,
       activeAiSelection,
       toggleChatOpen,

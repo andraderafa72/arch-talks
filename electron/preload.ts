@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { LatexRenderRequest, LatexRenderResult } from "./latex/types.ts";
 import type {
+  AiChatStreamPayload,
   LocalAiOptions,
   MarkdownChatRequest,
   MarkdownChatResponse,
@@ -60,5 +61,12 @@ contextBridge.exposeInMainWorld("electronApi", {
     ipcRenderer.invoke("markdownChat:send", req),
   workspaceChatSend: (req: WorkspaceChatRequest): Promise<WorkspaceChatResponse> =>
     ipcRenderer.invoke("workspaceChat:send", req),
+  subscribeAiChatStream: (listener: (payload: AiChatStreamPayload) => void): (() => void) => {
+    const handler = (_event: unknown, payload: AiChatStreamPayload) => listener(payload);
+    ipcRenderer.on("aiChat:stream", handler);
+    return () => {
+      ipcRenderer.removeListener("aiChat:stream", handler);
+    };
+  },
   aiListLocalOptions: (): Promise<LocalAiOptions> => ipcRenderer.invoke("ai:listLocalOptions"),
 });

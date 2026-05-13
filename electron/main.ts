@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, type WebContents } from "electron";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -169,7 +169,11 @@ async function getLocalAiChatSession(
   return entry;
 }
 
-async function collectLocalAiReply(session: ProcessSession, prompt: string): Promise<string> {
+async function collectLocalAiReply(
+  session: ProcessSession,
+  prompt: string,
+  options?: { onStreamText?: (accumulated: string) => void },
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let tokenReply = "";
     let settled = false;
@@ -203,6 +207,7 @@ async function collectLocalAiReply(session: ProcessSession, prompt: string): Pro
 
     const onToken = ({ token }: { token: string }) => {
       tokenReply += token;
+      options?.onStreamText?.(tokenReply);
     };
 
     const onMessage = ({ message }: { message: { content: string } }) => {
@@ -236,11 +241,13 @@ async function runLocalAiChat({
   systemPrompt,
   prompt,
   selection,
+  stream,
 }: {
   sessionKey: string;
   systemPrompt: string;
   prompt: string;
   selection: LocalAiSelection | undefined;
+  stream?: { sender: WebContents; streamId: string };
 }): Promise<string> {
   const runtime = await getAiRuntime();
 
@@ -253,10 +260,23 @@ async function runLocalAiChat({
     return "Provedor ou modelo selecionado não encontrado. Verifique se está instalado e reinicie o app.";
   }
 
+  const onStreamText =
+    stream == null
+      ? undefined
+      : (accumulated: string) => {
+          try {
+            if (!stream.sender.isDestroyed()) {
+              stream.sender.send("aiChat:stream", { streamId: stream.streamId, text: accumulated });
+            }
+          } catch {
+            /* ignore */
+          }
+        };
+
   const entry = await getLocalAiChatSession(runtime, sessionKey, model, systemPrompt);
   const reply = entry.pending
     .catch((e) => console.error(e))
-    .then(() => collectLocalAiReply(entry.session, prompt));
+    .then(() => collectLocalAiReply(entry.session, prompt, { onStreamText }));
   entry.pending = reply.catch(() => undefined);
   return reply;
 }
@@ -538,16 +558,17 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle("markdownChat:send", async (_evt, payload: unknown) => {
+  ipcMain.handle("markdownChat:send", async (event, payload: unknown) => {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       throw new Error("Invalid markdownChat:send payload");
     }
-    const { sessionKey, activeFile, fileContent, prompt, aiSelection } = payload as {
+    const { sessionKey, activeFile, fileContent, prompt, aiSelection, streamId } = payload as {
       sessionKey: string;
       activeFile: string;
       fileContent: string;
       prompt: string;
       aiSelection?: LocalAiSelection;
+      streamId?: string;
     };
     if (
       typeof sessionKey !== "string" ||
@@ -559,22 +580,28 @@ function registerIpc(): void {
       throw new Error("Invalid markdownChat:send fields");
     }
 
+    const stream =
+      typeof streamId === "string" && streamId.trim()
+        ? { sender: event.sender, streamId: streamId.trim() }
+        : undefined;
+
     const systemPrompt = buildMarkdownChatSystemPrompt(activeFile, fileContent);
-    const reply = await runLocalAiChat({ sessionKey, systemPrompt, prompt, selection: aiSelection });
+    const reply = await runLocalAiChat({ sessionKey, systemPrompt, prompt, selection: aiSelection, stream });
     const { reply: cleanReply, patch } = partitionChatReply(reply, activeFile);
     return { reply: cleanReply, patch };
   });
 
-  ipcMain.handle("workspaceChat:send", async (_evt, payload: unknown) => {
+  ipcMain.handle("workspaceChat:send", async (event, payload: unknown) => {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       throw new Error("Invalid workspaceChat:send payload");
     }
-    const { sessionKey, activeFile, files, prompt, aiSelection } = payload as {
+    const { sessionKey, activeFile, files, prompt, aiSelection, streamId } = payload as {
       sessionKey: string;
       activeFile: string;
       files: Record<string, string>;
       prompt: string;
       aiSelection?: LocalAiSelection;
+      streamId?: string;
     };
     if (
       typeof sessionKey !== "string" ||
@@ -586,8 +613,13 @@ function registerIpc(): void {
       throw new Error("Invalid workspaceChat:send fields");
     }
 
+    const stream =
+      typeof streamId === "string" && streamId.trim()
+        ? { sender: event.sender, streamId: streamId.trim() }
+        : undefined;
+
     const systemPrompt = buildWorkspaceChatSystemPrompt(activeFile, files);
-    const reply = await runLocalAiChat({ sessionKey, systemPrompt, prompt, selection: aiSelection });
+    const reply = await runLocalAiChat({ sessionKey, systemPrompt, prompt, selection: aiSelection, stream });
     const { reply: cleanReply, patch } = partitionChatReply(reply, activeFile);
     return { reply: cleanReply, patch };
   });

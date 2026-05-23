@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { EditorPanel } from "@/components/editor/EditorPanel";
 import { ToolEditorHeader } from "@/components/tools/ToolEditorHeader";
+import { UmlDiagramPreview } from "@/components/preview/UmlDiagramPreview";
 import { ToolSplitLayout } from "@/components/tools/ToolSplitLayout";
 import { UmlDiagramChatPopover } from "@/components/tools/UmlDiagramChatPopover";
 import { UnsavedTabCloseDialog } from "@/components/tools/UnsavedTabCloseDialog";
@@ -33,6 +34,8 @@ function UmlRenderToolContent({ theme }: UmlRenderToolProps) {
     pendingClosePath,
     hasUnsavedChanges,
     updateActiveContent,
+    activeUmlPreviewZoom,
+    setUmlPreviewZoom,
     selectFile,
     requestCloseTab,
     cancelCloseDialog,
@@ -53,6 +56,11 @@ function UmlRenderToolContent({ theme }: UmlRenderToolProps) {
     openUnavailableMessage: "Electron bridge loaded, but openTextWithDialog is unavailable. Restart the desktop app.",
   });
   const { previewUrl, lastBlob, loading, error } = usePlantUmlPreview(source);
+
+  const handleZoomChange = useCallback(
+    (zoom: number) => setUmlPreviewZoom(activeFile, zoom),
+    [activeFile, setUmlPreviewZoom],
+  );
 
   const [pendingAiProposal, setPendingAiProposal] = useState<AiEditProposal | null>(null);
   const [lastAppliedAiEdit, setLastAppliedAiEdit] = useState<AppliedAiEdit | null>(null);
@@ -183,16 +191,17 @@ function UmlRenderToolContent({ theme }: UmlRenderToolProps) {
                   </p>
                 ) : null}
               </div>
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-start overflow-auto p-3">
+              <div className="flex min-h-0 flex-1 flex-col p-3">
                 {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
                 {!error && source.trim() && loading ? (
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">Rendering…</p>
                 ) : null}
                 {!error && previewUrl ? (
-                  <img
+                  <UmlDiagramPreview
                     src={previewUrl}
                     alt="PlantUML diagram"
-                    className="max-w-full rounded border border-zinc-200 dark:border-zinc-700"
+                    zoom={activeUmlPreviewZoom}
+                    onZoomChange={handleZoomChange}
                   />
                 ) : null}
                 {!source.trim() && !error ? (

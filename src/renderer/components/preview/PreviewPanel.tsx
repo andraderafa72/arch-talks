@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 import { MarkdownMath } from "@/components/markdown/MarkdownMath";
+import { UmlDiagramPreview } from "@/components/preview/UmlDiagramPreview";
 import { Button } from "@/components/ui/button";
 import { usePlantUmlPreview } from "@/hooks/usePlantUmlPreview";
+import { getUmlPreviewZoom } from "@/lib/umlPreviewZoom";
+import { useEditorStore } from "@/state/store";
 
 type PreviewPanelProps = {
   activeFile: string;
@@ -26,6 +29,16 @@ export function PreviewPanel({
   const isUmlFile = activeFile.endsWith(".puml");
   const isMarkdownPreview = isMarkdownFilename(activeFile);
   const { previewUrl, lastBlob, loading, error } = usePlantUmlPreview(documentContent, { enabled: isUmlFile });
+  const umlPreviewZoom = useEditorStore((state) => {
+    const conversation = state.conversations[state.activeConversationId];
+    return getUmlPreviewZoom(conversation?.umlPreviewZoom, activeFile);
+  });
+  const setUmlPreviewZoom = useEditorStore((state) => state.setUmlPreviewZoom);
+
+  const handleZoomChange = useCallback(
+    (zoom: number) => setUmlPreviewZoom(activeFile, zoom),
+    [activeFile, setUmlPreviewZoom],
+  );
 
   const handleSavePngToChat = useCallback(() => {
     if (!lastBlob || !onSaveRenderedPng) return;
@@ -51,13 +64,18 @@ export function PreviewPanel({
         {isUmlFile ? (
           <div className="flex h-full min-h-0 flex-col gap-2 rounded-md border border-zinc-200 p-2 dark:border-zinc-700">
             <div className="text-xs font-medium text-zinc-600 dark:text-zinc-300">{activeFile}</div>
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-start overflow-auto">
+            <div className="flex min-h-0 flex-1 flex-col">
               {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
               {!error && documentContent.trim() && loading ? (
                 <p className="text-sm text-zinc-600 dark:text-zinc-400">Rendering…</p>
               ) : null}
               {!error && previewUrl ? (
-                <img src={previewUrl} alt={activeFile} className="max-w-full rounded border border-zinc-200 dark:border-zinc-700" />
+                <UmlDiagramPreview
+                  src={previewUrl}
+                  alt={activeFile}
+                  zoom={umlPreviewZoom}
+                  onZoomChange={handleZoomChange}
+                />
               ) : null}
               {!documentContent.trim() && !error ? (
                 <p className="text-sm text-zinc-600 dark:text-zinc-400">Empty diagram source.</p>

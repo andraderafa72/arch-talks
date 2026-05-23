@@ -97,4 +97,6 @@ export type Conversation = {
   /** Tabs currently loaded in-memory (for lazy load + LRU). */
   loadedChatTabIds?: string[];
   savedSnapshot: Record<string, string>;
+  /** Per-file UML preview zoom (1 = default). */
+  umlPreviewZoom?: Record<string, number>;
 };

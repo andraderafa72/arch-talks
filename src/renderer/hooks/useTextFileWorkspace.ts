@@ -1,4 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getUmlPreviewZoom,
+  migrateUmlPreviewZoomKey,
+  removeUmlPreviewZoomKey,
+  setUmlPreviewZoomInMap,
+  type UmlPreviewZoomMap,
+} from "@/lib/umlPreviewZoom";
 
 type TextWorkspaceV1 = {
   version: 1;
@@ -7,6 +14,7 @@ type TextWorkspaceV1 = {
   savedPaths?: Record<string, string>;
   activeFile: string;
   openEditorTabs: string[];
+  umlPreviewZoom?: UmlPreviewZoomMap;
 };
 
 export type TextFileWorkspaceOptions = {
@@ -46,6 +54,11 @@ function createDefaultWorkspace(options: TextFileWorkspaceOptions): TextWorkspac
   };
 }
 
+function isRecordOfNumbers(value: unknown): value is Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value as Record<string, unknown>).every(([, v]) => typeof v === "number");
+}
+
 function parseStoredWorkspace(raw: string): TextWorkspaceV1 | null {
   let data: unknown;
   try {
@@ -83,6 +96,9 @@ function parseStoredWorkspace(raw: string): TextWorkspaceV1 | null {
     activeFile,
     openEditorTabs: openRaw,
   };
+  if (isRecordOfNumbers(o.umlPreviewZoom)) {
+    draft.umlPreviewZoom = o.umlPreviewZoom;
+  }
   draft.openEditorTabs = normalizeOpenEditorTabs(draft);
   if (!Object.hasOwn(draft.files, draft.activeFile)) {
     const k = Object.keys(draft.files).sort()[0];
@@ -169,8 +185,9 @@ export function useTextFileWorkspace(options: TextFileWorkspaceOptions) {
   const [pendingClosePath, setPendingClosePath] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [leftWidth, setLeftWidth] = useState(680);
-  const { files, savedSnapshot, activeFile, openEditorTabs } = workspace;
+  const { files, savedSnapshot, activeFile, openEditorTabs, umlPreviewZoom } = workspace;
   const activeContent = files[activeFile] ?? "";
+  const activeUmlPreviewZoom = getUmlPreviewZoom(umlPreviewZoom, activeFile);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -178,6 +195,13 @@ export function useTextFileWorkspace(options: TextFileWorkspaceOptions) {
     }, PERSIST_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
   }, [options.storageKey, workspace]);
+
+  const setUmlPreviewZoom = useCallback((file: string, zoom: number) => {
+    setWorkspace((prev) => ({
+      ...prev,
+      umlPreviewZoom: setUmlPreviewZoomInMap(prev.umlPreviewZoom, file, zoom),
+    }));
+  }, []);
 
   const updateActiveContent = useCallback((next: string) => {
     setWorkspace((prev) => ({
@@ -223,6 +247,7 @@ export function useTextFileWorkspace(options: TextFileWorkspaceOptions) {
         files: filesRest,
         savedSnapshot: snapRest,
         savedPaths: savedPathsRest,
+        umlPreviewZoom: removeUmlPreviewZoomKey(prev.umlPreviewZoom, path),
         openEditorTabs: finalTabs.length > 0 ? finalTabs : [],
         activeFile: nextActive,
       };
@@ -309,6 +334,7 @@ export function useTextFileWorkspace(options: TextFileWorkspaceOptions) {
         savedSnapshot: nextSavedSnapshot,
         openEditorTabs: prev.openEditorTabs.map((p) => (p === tabPath ? nextTabPath : p)),
         activeFile: prev.activeFile === tabPath ? nextTabPath : prev.activeFile,
+        umlPreviewZoom: migrateUmlPreviewZoomKey(prev.umlPreviewZoom, tabPath, nextTabPath),
       };
       if (savedPath) {
         nextSavedPaths[nextTabPath] = savedPath;
@@ -348,6 +374,7 @@ export function useTextFileWorkspace(options: TextFileWorkspaceOptions) {
           files: nextFiles,
           savedSnapshot: nextSnapshot,
           savedPaths: nextSavedPaths,
+          umlPreviewZoom: migrateUmlPreviewZoomKey(prev.umlPreviewZoom, fromPath, nextName),
           activeFile: prev.activeFile === fromPath ? nextName : prev.activeFile,
           openEditorTabs: prev.openEditorTabs.map((p) => (p === fromPath ? nextName : p)),
         };
@@ -425,12 +452,14 @@ export function useTextFileWorkspace(options: TextFileWorkspaceOptions) {
       savedSnapshot,
       activeFile,
       activeContent,
+      activeUmlPreviewZoom,
       openEditorTabs,
       leftWidth,
       saveError,
       pendingClosePath,
       hasUnsavedChanges,
       updateActiveContent,
+      setUmlPreviewZoom,
       selectFile,
       requestCloseTab,
       cancelCloseDialog,
@@ -447,12 +476,14 @@ export function useTextFileWorkspace(options: TextFileWorkspaceOptions) {
       savedSnapshot,
       activeFile,
       activeContent,
+      activeUmlPreviewZoom,
       openEditorTabs,
       leftWidth,
       saveError,
       pendingClosePath,
       hasUnsavedChanges,
       updateActiveContent,
+      setUmlPreviewZoom,
       selectFile,
       requestCloseTab,
       cancelCloseDialog,

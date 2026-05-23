@@ -1,5 +1,11 @@
 import { create } from "zustand";
 import { applyPatch } from "@/lib/patchEngine";
+import {
+  removeUmlPreviewZoomByPrefix,
+  removeUmlPreviewZoomKey,
+  renameUmlPreviewZoomPaths,
+  setUmlPreviewZoomInMap,
+} from "@/lib/umlPreviewZoom";
 import { ChatPersistenceService } from "@/persistence/services/chatPersistenceService";
 import type {
   AppScreen,
@@ -56,6 +62,7 @@ type EditorState = {
   mkdirConversationPath: (dirPath: string) => void;
   closeEditorTab: (file: string) => void;
   saveFileSnapshot: (file: string) => void;
+  setUmlPreviewZoom: (file: string, zoom: number) => void;
   /** Persist AI selection on the active chat tab of the active conversation. */
   setActiveChatAiSelection: (selection: LocalAiSelection | undefined) => void;
 };
@@ -510,6 +517,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       };
     }),
 
+  setUmlPreviewZoom: (file, zoom) =>
+    set((state) => {
+      const id = state.activeConversationId;
+      const current = state.conversations[id];
+      if (!current || !Object.hasOwn(current.files, file)) return {};
+      return {
+        conversations: {
+          ...state.conversations,
+          [id]: {
+            ...current,
+            umlPreviewZoom: setUmlPreviewZoomInMap(current.umlPreviewZoom, file, zoom),
+          },
+        },
+      };
+    }),
+
   setFileContent: (file, content) =>
     set((state) => {
       const id = state.activeConversationId;
@@ -702,6 +725,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...current,
             files: rest,
             savedSnapshot: snapRest,
+            umlPreviewZoom: removeUmlPreviewZoomKey(current.umlPreviewZoom, file),
             activeFile: nextActive,
             openEditorTabs: nextTabs,
             pendingPatch:
@@ -751,6 +775,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...current,
             files: nextFiles,
             savedSnapshot: nextSnapshot,
+            umlPreviewZoom: removeUmlPreviewZoomByPrefix(current.umlPreviewZoom, norm),
             activeFile: nextActive,
             openEditorTabs: nextTabs,
             pendingPatch: nextPatch,
@@ -819,6 +844,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...current,
             files: nextFiles,
             savedSnapshot: nextSnapshot,
+            umlPreviewZoom: renameUmlPreviewZoomPaths(current.umlPreviewZoom, from, to),
             activeFile: nextActive,
             openEditorTabs: normalizeOpenEditorTabs({
               files: nextFiles,

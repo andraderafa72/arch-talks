@@ -1,11 +1,12 @@
 import type { ApiConversationRow } from "@/api/mappers";
-import type { ChatIndexItem, ConversationKind, Patch } from "@/types";
+import type { ChatIndexItem, ConversationKind, Patch, VaultPlanProposal } from "@/types";
 
 export type ConversationDocumentMeta = {
   id: string;
   title: string;
   kind: ConversationKind;
   templateId?: string | null;
+  createdAt?: string;
   updatedAt?: string;
   activeFile?: string;
   pendingPatch?: Patch | null;
@@ -13,7 +14,14 @@ export type ConversationDocumentMeta = {
   openEditorTabs?: string[];
   activeChatTabId?: string;
   chatTabs?: ChatIndexItem[];
+  openChatTabIds?: string[];
   fileCount?: number;
+  referenceFolderPath?: string;
+  referenceExcerpt?: string;
+  pendingVaultProposal?: VaultPlanProposal | null;
+  vaultName?: string;
+  vaultRootPath?: string;
+  vaultCategory?: string;
 };
 
 export interface ConversationDocumentStore {

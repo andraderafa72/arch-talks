@@ -3,15 +3,26 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 
-export type MarkdownMathTone = "user" | "assistant" | "system" | "document";
+export type MarkdownMathTone =
+  | "user"
+  | "assistant"
+  | "system"
+  | "system-info"
+  | "system-warning"
+  | "system-error"
+  | "document";
 
 function buildComponents(tone: MarkdownMathTone): Components {
   const linkClass =
     tone === "user"
       ? "text-sky-300 underline underline-offset-2 hover:text-sky-200"
-      : tone === "system"
+      : tone === "system-error"
         ? "text-red-800 underline underline-offset-2 dark:text-red-200"
-        : "text-blue-700 underline underline-offset-2 dark:text-blue-300";
+        : tone === "system-warning"
+          ? "text-amber-900 underline underline-offset-2 dark:text-amber-200"
+          : tone === "system" || tone === "system-info"
+            ? "text-slate-700 underline underline-offset-2 dark:text-slate-200"
+            : "text-blue-700 underline underline-offset-2 dark:text-blue-300";
 
   return {
     p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
@@ -43,11 +54,12 @@ function buildComponents(tone: MarkdownMathTone): Components {
     tr: ({ children }) => <tr>{children}</tr>,
     tbody: ({ children }) => <tbody>{children}</tbody>,
     pre: ({ children }) => (
-      <pre className="mb-2 max-w-full overflow-x-auto rounded-md bg-zinc-900 p-2 text-xs text-zinc-100">{children}</pre>
+      <pre className="mb-2 max-w-full overflow-x-auto whitespace-pre-wrap rounded-md bg-zinc-900 p-2 font-mono text-xs text-zinc-100 dark:bg-zinc-950">
+        {children}
+      </pre>
     ),
     code: ({ className, children, ...props }) => {
-      const isBlock = Boolean(className?.includes("language-"));
-      if (isBlock) {
+      if (className?.startsWith("language-")) {
         return (
           <code className={className} {...props}>
             {children}
@@ -56,7 +68,7 @@ function buildComponents(tone: MarkdownMathTone): Components {
       }
       return (
         <code
-          className="rounded bg-zinc-200/80 px-1 py-0.5 font-mono text-[0.85em] dark:bg-zinc-700/80"
+          className="rounded bg-zinc-200/80 px-1 py-0.5 font-mono text-[0.85em] break-all dark:bg-zinc-700/80"
           {...props}
         >
           {children}

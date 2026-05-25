@@ -18,6 +18,7 @@ export function exposeLocalAiApis(): Pick<
   | "workspaceChatSend"
   | "subscribeAiChatStream"
   | "aiListLocalOptions"
+  | "aiChatCancel"
 > {
   return {
     markdownChatSend: (req: MarkdownChatRequest): Promise<MarkdownChatResponse> =>
@@ -33,5 +34,7 @@ export function exposeLocalAiApis(): Pick<
       };
     },
     aiListLocalOptions: (): Promise<LocalAiOptions> => ipcRenderer.invoke("ai:listLocalOptions"),
+    aiChatCancel: (sessionKey: string): Promise<boolean> =>
+      ipcRenderer.invoke("ai:cancelChat", { sessionKey }),
   };
 }

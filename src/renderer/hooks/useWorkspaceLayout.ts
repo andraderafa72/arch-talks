@@ -1,9 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { WorkspaceLayoutPreferences } from "@/types/userPreferences";
+import { DEFAULT_WORKSPACE_LAYOUT } from "@/types/userPreferences";
 
-export function useWorkspaceLayout() {
-  const [leftWidth, setLeftWidth] = useState(680);
-  const [rightWidth, setRightWidth] = useState(380);
-  const [bottomHeight, setBottomHeight] = useState(260);
+type UseWorkspaceLayoutOptions = {
+  initialLayout?: WorkspaceLayoutPreferences;
+  onLayoutChange?: (layout: WorkspaceLayoutPreferences) => void;
+};
+
+export function useWorkspaceLayout({
+  initialLayout = DEFAULT_WORKSPACE_LAYOUT,
+  onLayoutChange,
+}: UseWorkspaceLayoutOptions = {}) {
+  const [leftWidth, setLeftWidth] = useState(initialLayout.leftWidth);
+  const [rightWidth, setRightWidth] = useState(initialLayout.rightWidth);
+  const [bottomHeight, setBottomHeight] = useState(initialLayout.bottomHeight);
+  const [filesSidebarWidth, setFilesSidebarWidth] = useState(initialLayout.filesSidebarWidth);
+
+  useEffect(() => {
+    onLayoutChange?.({ leftWidth, rightWidth, bottomHeight, filesSidebarWidth });
+  }, [bottomHeight, filesSidebarWidth, leftWidth, onLayoutChange, rightWidth]);
 
   const startHorizontalDrag = (side: "left" | "right") => {
     const onMove = (event: MouseEvent) => {
@@ -22,11 +37,9 @@ export function useWorkspaceLayout() {
     window.addEventListener("mouseup", onUp);
   };
 
-  const startVerticalDrag = () => {
+  const startFilesSidebarDrag = () => {
     const onMove = (event: MouseEvent) => {
-      const available = window.innerHeight - 120;
-      const next = Math.max(160, Math.min(420, available - event.clientY));
-      setBottomHeight(next);
+      setFilesSidebarWidth(Math.max(120, Math.min(480, event.clientX)));
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
@@ -40,7 +53,8 @@ export function useWorkspaceLayout() {
     leftWidth,
     rightWidth,
     bottomHeight,
+    filesSidebarWidth,
     startHorizontalDrag,
-    startVerticalDrag,
+    startFilesSidebarDrag,
   };
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ChevronDown, ChevronRight, FilePlus, FolderOpen, FolderPlus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -7,7 +7,19 @@ const PATH_DRAG_TYPE = "application/x-rag-talks-path";
 
 type TreeNode = { name: string; fullPath: string; isFile: boolean; children: TreeNode[] };
 
-type PathInputMode = "new-file" | "new-folder" | "rename" | null;
+type PathInputMode = "new-file" | "new-folder" | null;
+
+type InlineRenameControl = {
+  renamingPath: string | null;
+  renameValue: string;
+  onRenameValueChange: (value: string) => void;
+  onRenameCommit: () => void;
+  onRenameCancel: () => void;
+  inputRef: RefObject<HTMLInputElement | null>;
+};
+
+const inlineRenameInputClass =
+  "min-w-0 flex-1 rounded-sm border-0 bg-transparent px-1 py-0 text-sm leading-snug outline-none ring-1 ring-zinc-400 dark:ring-zinc-500";
 
 function buildFileTree(paths: string[]): TreeNode[] {
   const root: TreeNode = { name: "", fullPath: "", isFile: false, children: [] };
@@ -124,6 +136,8 @@ function resolveNewItemParentDir(
   return parentDir(activeFile);
 }
 
+export type PendingReviewKind = "create" | "update";
+
 type FileTreeItemProps = {
   node: TreeNode;
   activeFile: string;
@@ -139,6 +153,8 @@ type FileTreeItemProps = {
   onDropOnFolder: (targetFolder: string, e: React.DragEvent) => void;
   onRequestRename: (path: string) => void;
   onRequestDelete: (path: string) => void;
+  pendingReviewByPath?: ReadonlyMap<string, PendingReviewKind>;
+  inlineRename: InlineRenameControl;
 };
 
 /** Inner row layout: chevron column + label column (same for every depth; nesting is via nested `<ul>` padding). */
@@ -160,6 +176,8 @@ function FileTreeItem({
   onDropOnFolder,
   onRequestRename,
   onRequestDelete,
+  pendingReviewByPath,
+  inlineRename,
 }: FileTreeItemProps) {
   const folderRowPaddingLeft = Math.max(0, LABEL_INNER_START_PX - CHEVRON_SLOT_PX);
 
@@ -171,6 +189,8 @@ function FileTreeItem({
     const dirty = hasUnsavedChanges(node.fullPath);
     const isActive = node.fullPath === activeFile;
     const isSelected = selectedPaths.has(node.fullPath);
+    const reviewKind = pendingReviewByPath?.get(node.fullPath);
+    const isRenaming = inlineRename.renamingPath === node.fullPath;
     return (
       <li className="list-none w-full min-w-0">
         <div
@@ -182,51 +202,106 @@ function FileTreeItem({
               : isSelected
                 ? "border-zinc-300 bg-zinc-100/90 text-zinc-950 ring-1 ring-zinc-300/80 dark:border-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-50 dark:ring-zinc-600"
                 : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-900/70",
+            isRenaming && "ring-1 ring-zinc-400 dark:ring-zinc-500",
           )}
         >
-          <button
-            type="button"
-            draggable
-            onDragStart={(e) => {
-              onBeginPathDrag(node.fullPath);
-              e.dataTransfer.setData(PATH_DRAG_TYPE, node.fullPath);
-              e.dataTransfer.effectAllowed = "move";
-            }}
-            onDragEnd={() => {
-              onBeginPathDrag("");
-            }}
-            onClick={(ev) => onPick(node.fullPath, true, ev)}
-            className="flex min-w-0 flex-1 items-baseline gap-1 text-left"
-          >
-            <span className="min-w-0 flex-1 truncate">{node.name}</span>
-            {dirty ? <span className="shrink-0 text-amber-600 dark:text-amber-400">*</span> : null}
-          </button>
-          <span className="invisible ml-1 flex shrink-0 items-center gap-0.5 group-hover/row:visible group-focus-within/row:visible">
-            <button
-              type="button"
-              className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRequestRename(node.fullPath);
-              }}
+          {isRenaming ? (
+            <input
+              ref={inlineRename.inputRef}
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={inlineRename.renameValue}
               aria-label={`Renomear ${node.name}`}
-              title={`Renomear ${node.name}`}
-            >
-              <Pencil className="h-3 w-3" aria-hidden />
-            </button>
+              className={cn(inlineRenameInputClass, "text-zinc-900 dark:text-zinc-100")}
+              onChange={(e) => inlineRename.onRenameValueChange(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  inlineRename.onRenameCommit();
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  inlineRename.onRenameCancel();
+                }
+              }}
+              onBlur={() => inlineRename.onRenameCommit()}
+            />
+          ) : (
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRequestDelete(node.fullPath);
+              draggable
+              onDragStart={(e) => {
+                onBeginPathDrag(node.fullPath);
+                e.dataTransfer.setData(PATH_DRAG_TYPE, node.fullPath);
+                e.dataTransfer.effectAllowed = "move";
               }}
-              aria-label={`Excluir ${node.name}`}
-              title={`Excluir ${node.name}`}
+              onDragEnd={() => {
+                onBeginPathDrag("");
+              }}
+              onClick={(ev) => onPick(node.fullPath, true, ev)}
+              className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left"
             >
-              <Trash2 className="h-3 w-3" aria-hidden />
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate",
+                  !isActive &&
+                    reviewKind === "create" &&
+                    "text-emerald-700 dark:text-emerald-400",
+                  !isActive &&
+                    reviewKind === "update" &&
+                    "text-amber-700 dark:text-amber-400",
+                )}
+              >
+                {node.name}
+              </span>
+              {dirty ? <span className="shrink-0 text-amber-600 dark:text-amber-400">*</span> : null}
+              {reviewKind ? (
+                <span
+                  className={cn(
+                    "shrink-0 font-mono text-[10px] font-semibold leading-none",
+                    reviewKind === "create"
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-amber-600 dark:text-amber-400",
+                  )}
+                  title={reviewKind === "create" ? "Untracked (new)" : "Modified"}
+                  aria-label={reviewKind === "create" ? "Untracked" : "Modified"}
+                >
+                  {reviewKind === "create" ? "U" : "M"}
+                </span>
+              ) : null}
             </button>
-          </span>
+          )}
+          {!isRenaming ? (
+            <span className="invisible ml-1 flex shrink-0 items-center gap-0.5 group-hover/row:visible group-focus-within/row:visible">
+              <button
+                type="button"
+                className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRequestRename(node.fullPath);
+                }}
+                aria-label={`Renomear ${node.name}`}
+                title={`Renomear ${node.name}`}
+              >
+                <Pencil className="h-3 w-3" aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRequestDelete(node.fullPath);
+                }}
+                aria-label={`Excluir ${node.name}`}
+                title={`Excluir ${node.name}`}
+              >
+                <Trash2 className="h-3 w-3" aria-hidden />
+              </button>
+            </span>
+          ) : null}
         </div>
       </li>
     );
@@ -235,6 +310,8 @@ function FileTreeItem({
   const collapsed = collapsedPaths.has(node.fullPath);
   const isSelected = selectedPaths.has(node.fullPath);
   const isOver = dragOverFolder === node.fullPath;
+  const isRenaming = inlineRename.renamingPath === node.fullPath;
+  const folderLabel = node.name || "files";
 
   return (
     <li className="list-none w-full min-w-0">
@@ -262,65 +339,103 @@ function FileTreeItem({
             ? "border-zinc-300 bg-zinc-100 text-zinc-950 ring-1 ring-zinc-300/90 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:ring-zinc-600"
             : "text-zinc-600 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900/70",
           isOver && "bg-sky-100 ring-1 ring-sky-400 dark:bg-sky-950/50 dark:ring-sky-600",
+          isRenaming && "ring-1 ring-zinc-400 dark:ring-zinc-500",
         )}
         style={{ paddingLeft: folderRowPaddingLeft }}
       >
-        <button
-          type="button"
-          draggable
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? `${node.name || "Pasta"}, colapsada. Clique para expandir.` : `${node.name || "Pasta"}, expandida. Clique para colapsar.`}
-          onDragStart={(e) => {
-            onBeginPathDrag(node.fullPath);
-            e.dataTransfer.setData(PATH_DRAG_TYPE, node.fullPath);
-            e.dataTransfer.effectAllowed = "move";
-          }}
-          onDragEnd={() => {
-            onBeginPathDrag("");
-          }}
-          onClick={(ev) => {
-            if (!ev.ctrlKey && !ev.metaKey && !ev.shiftKey) {
-              onToggleCollapse(node.fullPath);
-            }
-            onPick(node.fullPath, false, ev);
-          }}
-          className="flex min-w-0 flex-1 items-center gap-0 text-left"
-        >
-          <span
-            className="flex shrink-0 items-center justify-center text-zinc-500 dark:text-zinc-400"
-            style={{ width: CHEVRON_SLOT_PX, minWidth: CHEVRON_SLOT_PX }}
-            aria-hidden
+        {isRenaming ? (
+          <div className="flex min-w-0 flex-1 items-center gap-0">
+            <span
+              className="flex shrink-0 items-center justify-center text-zinc-500 dark:text-zinc-400"
+              style={{ width: CHEVRON_SLOT_PX, minWidth: CHEVRON_SLOT_PX }}
+              aria-hidden
+            >
+              {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </span>
+            <input
+              ref={inlineRename.inputRef}
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={inlineRename.renameValue}
+              aria-label={`Renomear ${folderLabel}`}
+              className={cn(inlineRenameInputClass, "font-medium text-zinc-900 dark:text-zinc-100")}
+              onChange={(e) => inlineRename.onRenameValueChange(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  inlineRename.onRenameCommit();
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  inlineRename.onRenameCancel();
+                }
+              }}
+              onBlur={() => inlineRename.onRenameCommit()}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            draggable
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? `${folderLabel}, colapsada. Clique para expandir.` : `${folderLabel}, expandida. Clique para colapsar.`}
+            onDragStart={(e) => {
+              onBeginPathDrag(node.fullPath);
+              e.dataTransfer.setData(PATH_DRAG_TYPE, node.fullPath);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragEnd={() => {
+              onBeginPathDrag("");
+            }}
+            onClick={(ev) => {
+              if (!ev.ctrlKey && !ev.metaKey && !ev.shiftKey) {
+                onToggleCollapse(node.fullPath);
+              }
+              onPick(node.fullPath, false, ev);
+            }}
+            className="flex min-w-0 flex-1 items-center gap-0 text-left"
           >
-            {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            <span
+              className="flex shrink-0 items-center justify-center text-zinc-500 dark:text-zinc-400"
+              style={{ width: CHEVRON_SLOT_PX, minWidth: CHEVRON_SLOT_PX }}
+              aria-hidden
+            >
+              {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{folderLabel}</span>
+          </button>
+        )}
+        {!isRenaming ? (
+          <span className="invisible ml-1 flex shrink-0 items-center gap-0.5 group-hover/row:visible group-focus-within/row:visible">
+            <button
+              type="button"
+              className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestRename(node.fullPath);
+              }}
+              aria-label={`Renomear ${folderLabel}`}
+              title={`Renomear ${folderLabel}`}
+            >
+              <Pencil className="h-3 w-3" aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestDelete(node.fullPath);
+              }}
+              aria-label={`Excluir ${folderLabel}`}
+              title={`Excluir ${folderLabel}`}
+            >
+              <Trash2 className="h-3 w-3" aria-hidden />
+            </button>
           </span>
-          <span className="min-w-0 flex-1 truncate">{node.name || "files"}</span>
-        </button>
-        <span className="invisible ml-1 flex shrink-0 items-center gap-0.5 group-hover/row:visible group-focus-within/row:visible">
-          <button
-            type="button"
-            className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRequestRename(node.fullPath);
-            }}
-            aria-label={`Renomear ${node.name || "files"}`}
-            title={`Renomear ${node.name || "files"}`}
-          >
-            <Pencil className="h-3 w-3" aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRequestDelete(node.fullPath);
-            }}
-            aria-label={`Excluir ${node.name || "files"}`}
-            title={`Excluir ${node.name || "files"}`}
-          >
-            <Trash2 className="h-3 w-3" aria-hidden />
-          </button>
-        </span>
+        ) : null}
       </div>
       {!collapsed ? (
         <ul className="ml-0 w-full min-w-0 border-l border-zinc-200 pl-3 dark:border-zinc-800">
@@ -341,6 +456,8 @@ function FileTreeItem({
               onDropOnFolder={onDropOnFolder}
               onRequestRename={onRequestRename}
               onRequestDelete={onRequestDelete}
+              pendingReviewByPath={pendingReviewByPath}
+              inlineRename={inlineRename}
             />
           ))}
         </ul>
@@ -349,11 +466,17 @@ function FileTreeItem({
   );
 }
 
+type VaultFileTreeFilter = "markdown" | "all";
+
 type FilesSidebarProps = {
   files: string[];
   activeFile: string;
   hasUnsavedChanges: (file: string) => boolean;
-  onSelectFile: (file: string) => void;
+  pendingReviewByPath?: ReadonlyMap<string, PendingReviewKind>;
+  showVaultFileTreeFilter?: boolean;
+  vaultFileTreeFilter?: VaultFileTreeFilter;
+  onVaultFileTreeFilterChange?: (filter: VaultFileTreeFilter) => void;
+  onSelectFile: (file: string) => void | Promise<void>;
   onAddFile: (path: string) => void;
   onMkdir: (path: string) => void;
   onRename: (from: string, to: string) => void;
@@ -379,6 +502,10 @@ export function ConversationsSidebar({
   onMovePath,
   onOpenFolder,
   isElectron,
+  pendingReviewByPath,
+  showVaultFileTreeFilter = false,
+  vaultFileTreeFilter = "markdown",
+  onVaultFileTreeFilterChange,
 }: FilesSidebarProps) {
   const tree = useMemo(() => buildFileTree(files), [files]);
   const folderPaths = useMemo(() => collectFolderPaths(tree), [tree]);
@@ -386,10 +513,12 @@ export function ConversationsSidebar({
   const [error, setError] = useState<string | null>(null);
   const [pathInputMode, setPathInputMode] = useState<PathInputMode>(null);
   const [pathInputValue, setPathInputValue] = useState("");
-  const [renameFromPath, setRenameFromPath] = useState("");
   /** Parent directory for new file or new folder; no trailing slash. "" = root. */
   const [newFileDirPrefix, setNewFileDirPrefix] = useState("");
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameInputValue, setRenameInputValue] = useState("");
   const pathInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const pathInputModeRef = useRef<PathInputMode>(null);
 
   useEffect(() => {
@@ -408,14 +537,18 @@ export function ConversationsSidebar({
 
   const orderedVisiblePaths = useMemo(() => flattenVisiblePaths(tree, collapsedPaths), [tree, collapsedPaths]);
 
+  const cancelRename = useCallback(() => {
+    setRenamingPath(null);
+    setRenameInputValue("");
+  }, []);
+
   const cancelPathInput = useCallback(() => {
     setPathInputMode(null);
     setPathInputValue("");
-    setRenameFromPath("");
     setNewFileDirPrefix("");
   }, []);
 
-  /** Close path input and cancel when focus leaves (create, or rename). */
+  /** Close path input and cancel when focus leaves (new file/folder). */
   const handlePathInputBlur = useCallback(() => {
     window.setTimeout(() => {
       if (!pathInputModeRef.current) return;
@@ -427,12 +560,15 @@ export function ConversationsSidebar({
 
   useEffect(() => {
     if (!pathInputMode || !pathInputRef.current) return;
-    const el = pathInputRef.current;
-    el.focus();
-    if (pathInputMode === "rename") {
-      requestAnimationFrame(() => el.select());
-    }
+    pathInputRef.current.focus();
   }, [pathInputMode]);
+
+  useEffect(() => {
+    if (!renamingPath || !renameInputRef.current) return;
+    const el = renameInputRef.current;
+    el.focus();
+    requestAnimationFrame(() => el.select());
+  }, [renamingPath]);
 
   const run = useCallback(
     (fn: () => void) => {
@@ -482,7 +618,7 @@ export function ConversationsSidebar({
       }
 
       if (isFile) {
-        onSelectFile(path);
+        void onSelectFile(path);
       }
     },
     [activeFile, onSelectFile, orderedVisiblePaths],
@@ -503,29 +639,69 @@ export function ConversationsSidebar({
   }, []);
 
   const openNewFile = useCallback(() => {
+    cancelRename();
     setError(null);
     setPathInputMode("new-file");
     setPathInputValue("");
     setNewFileDirPrefix(resolveNewItemParentDir(folderPaths, selectedPaths, activeFile));
-  }, [activeFile, folderPaths, selectedPaths]);
+  }, [activeFile, cancelRename, folderPaths, selectedPaths]);
 
   const openNewFolder = useCallback(() => {
+    cancelRename();
     setError(null);
     setPathInputMode("new-folder");
     setPathInputValue("");
     setNewFileDirPrefix(resolveNewItemParentDir(folderPaths, selectedPaths, activeFile));
-  }, [activeFile, folderPaths, selectedPaths]);
+  }, [activeFile, cancelRename, folderPaths, selectedPaths]);
 
-  const openRename = useCallback((path: string) => {
-    if (!path) return;
-    setError(null);
-    setNewFileDirPrefix("");
-    setPathInputMode("rename");
-    setPathInputValue(path);
-    setRenameFromPath(path);
-    setSelectedPaths(new Set([path]));
-    selectionAnchorRef.current = path;
-  }, []);
+  const openRename = useCallback(
+    (path: string) => {
+      if (!path) return;
+      cancelPathInput();
+      setError(null);
+      setRenamingPath(path);
+      setRenameInputValue(basenamePath(path));
+      setSelectedPaths(new Set([path]));
+      selectionAnchorRef.current = path;
+      setCollapsedPaths((prev) => {
+        const next = new Set(prev);
+        const parts = path.split("/").filter(Boolean);
+        let acc = "";
+        for (let i = 0; i < parts.length - 1; i++) {
+          acc = acc ? `${acc}/${parts[i]}` : parts[i];
+          next.delete(acc);
+        }
+        return next;
+      });
+    },
+    [cancelPathInput],
+  );
+
+  const commitRename = useCallback(() => {
+    const from = renamingPath;
+    if (!from) return;
+    const trimmed = renameInputValue.trim();
+    if (!trimmed) {
+      cancelRename();
+      return;
+    }
+    if (trimmed.includes("..") || trimmed.includes("/")) {
+      setError("Digite apenas o nome (sem caminhos).");
+      return;
+    }
+    const parent = parentDir(from);
+    const to = parent ? `${parent}/${trimmed}` : trimmed;
+    if (to === from) {
+      cancelRename();
+      return;
+    }
+    run(() => {
+      onRename(from, to);
+      setSelectedPaths(new Set([to]));
+      selectionAnchorRef.current = to;
+    });
+    cancelRename();
+  }, [cancelRename, onRename, renameInputValue, renamingPath, run]);
 
   const submitPathInput = useCallback(() => {
     const trimmed = pathInputValue.trim().replace(/\\/g, "/");
@@ -555,31 +731,20 @@ export function ConversationsSidebar({
         run(() => onMkdir(trimmed.replace(/\/+$/, "")));
       }
       cancelPathInput();
-      return;
     }
+  }, [cancelPathInput, newFileDirPrefix, onAddFile, onMkdir, pathInputMode, pathInputValue, run]);
 
-    run(() => {
-      if (pathInputMode === "rename") {
-        const from = renameFromPath || activeFile;
-        if (trimmed === from) return;
-        onRename(from, trimmed);
-        setSelectedPaths(new Set([trimmed]));
-        selectionAnchorRef.current = trimmed;
-      }
-    });
-    cancelPathInput();
-  }, [
-    activeFile,
-    cancelPathInput,
-    newFileDirPrefix,
-    onAddFile,
-    onMkdir,
-    onRename,
-    pathInputMode,
-    pathInputValue,
-    renameFromPath,
-    run,
-  ]);
+  const inlineRename = useMemo<InlineRenameControl>(
+    () => ({
+      renamingPath,
+      renameValue: renameInputValue,
+      onRenameValueChange: setRenameInputValue,
+      onRenameCommit: commitRename,
+      onRenameCancel: cancelRename,
+      inputRef: renameInputRef,
+    }),
+    [cancelRename, commitRename, renameInputValue, renamingPath],
+  );
 
   const applyMove = useCallback(
     (fromPath: string, targetFolder: string) => {
@@ -666,10 +831,19 @@ export function ConversationsSidebar({
       className="flex h-full min-h-0 flex-col border-r border-zinc-200 bg-[#fefefe] p-2 outline-none dark:border-zinc-700 dark:bg-zinc-950"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === "Escape" && !pathInputMode) {
+        if (e.key !== "Escape") return;
+        if (renamingPath) {
           e.preventDefault();
-          clearSelection();
+          cancelRename();
+          return;
         }
+        if (pathInputMode) {
+          e.preventDefault();
+          cancelPathInput();
+          return;
+        }
+        e.preventDefault();
+        clearSelection();
       }}
     >
       <div className="mb-2 flex items-center justify-between gap-1">
@@ -688,6 +862,37 @@ export function ConversationsSidebar({
           </Button>
         ) : null}
       </div>
+
+      {showVaultFileTreeFilter && onVaultFileTreeFilterChange ? (
+        <div
+          className="mb-2 grid grid-cols-2 gap-1 rounded-md border border-zinc-300 bg-zinc-100 p-0.5 dark:border-zinc-600 dark:bg-zinc-900"
+          role="tablist"
+          aria-label="Vault file tree filter"
+        >
+          {(
+            [
+              { id: "markdown" as const, label: "Markdown" },
+              { id: "all" as const, label: "All files" },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={vaultFileTreeFilter === tab.id}
+              className={cn(
+                "rounded px-2 py-1.5 text-xs font-medium transition-colors",
+                vaultFileTreeFilter === tab.id
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
+                  : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100",
+              )}
+              onClick={() => onVaultFileTreeFilterChange(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mb-2 flex flex-wrap items-center gap-1">
         <Button
@@ -721,11 +926,9 @@ export function ConversationsSidebar({
           <label htmlFor="sidebar-path-input" className="sr-only">
             {pathInputMode === "new-file"
               ? "Nome do novo arquivo"
-              : pathInputMode === "new-folder"
-                ? newFileDirPrefix
-                  ? "Nome da nova subpasta"
-                  : "Caminho da nova pasta"
-                : "Renomear para"}
+              : newFileDirPrefix
+                ? "Nome da nova subpasta"
+                : "Caminho da nova pasta"}
           </label>
           <div
             className={cn(
@@ -812,6 +1015,8 @@ export function ConversationsSidebar({
                 onDropOnFolder={handleDropOnFolder}
                 onRequestRename={openRename}
                 onRequestDelete={requestDeletePath}
+                pendingReviewByPath={pendingReviewByPath}
+                inlineRename={inlineRename}
               />
             ))}
           </ul>

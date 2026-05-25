@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import { applyPatch } from "@/lib/patchEngine";
+import { isAbortError, stoppedAssistantContent } from "@/lib/localAiErrors";
+import { useEditorStore } from "@/state/store";
 import type { AiEditProposal, Patch } from "@/types";
 import type { LocalAiSelection } from "@/types/electron-api";
 
@@ -35,6 +37,7 @@ type MarkdownToPdfChatContextValue = {
   toggleChatOpen: () => void;
   closeChat: () => void;
   sendChatMessage: (promptOverride?: string) => Promise<void>;
+  stopChatMessage: () => Promise<void>;
   clearActiveFileChat: () => void;
 };
 
@@ -69,11 +72,13 @@ export function MarkdownToPdfChatProvider({
   onPatchReceived,
   children,
 }: MarkdownToPdfChatProviderProps) {
+  const locale = useEditorStore((s) => s.locale);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatPrompt, setChatPrompt] = useState("");
   const [chatByFile, setChatByFile] = useState<Record<string, MarkdownToPdfChatMessage[]>>({});
   const [isSending, setIsSending] = useState(false);
   const [streamingAssistantText, setStreamingAssistantText] = useState<string | null>(null);
+  const streamingTextRef = useRef("");
   const [chatError, setChatError] = useState<string | null>(null);
   const [activeAiSelection, setActiveAiSelection] = useState<LocalAiSelection | undefined>(undefined);
   const activeStreamIdRef = useRef<string | null>(null);
@@ -88,6 +93,7 @@ export function MarkdownToPdfChatProvider({
     if (!api?.subscribeAiChatStream) return;
     return api.subscribeAiChatStream((payload) => {
       if (payload.streamId === activeStreamIdRef.current) {
+        streamingTextRef.current = payload.text;
         setStreamingAssistantText(payload.text);
       }
     });
@@ -143,6 +149,7 @@ export function MarkdownToPdfChatProvider({
     const sessionKey = `markdown-to-pdf:${snapshotFile}`;
     const streamId = crypto.randomUUID();
     activeStreamIdRef.current = streamId;
+    streamingTextRef.current = "";
     setStreamingAssistantText("");
 
     try {
@@ -155,6 +162,7 @@ export function MarkdownToPdfChatProvider({
         streamId,
       });
       activeStreamIdRef.current = null;
+      streamingTextRef.current = "";
       setStreamingAssistantText(null);
       const assistantMessage: MarkdownToPdfChatMessage = {
         id: crypto.randomUUID(),
@@ -189,7 +197,25 @@ export function MarkdownToPdfChatProvider({
       }
     } catch (err: unknown) {
       activeStreamIdRef.current = null;
+      const partial = streamingTextRef.current;
+      streamingTextRef.current = "";
       setStreamingAssistantText(null);
+      if (isAbortError(err)) {
+        const stoppedContent = stoppedAssistantContent(partial, locale);
+        if (stoppedContent) {
+          const assistantMessage: MarkdownToPdfChatMessage = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: stoppedContent,
+            timestamp: new Date().toISOString(),
+          };
+          setChatByFile((prev) => ({
+            ...prev,
+            [snapshotFile]: [...(prev[snapshotFile] ?? []), assistantMessage],
+          }));
+        }
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Erro ao contatar IA local.";
       setChatError(msg);
       const errMessage: MarkdownToPdfChatMessage = {
@@ -205,7 +231,14 @@ export function MarkdownToPdfChatProvider({
     } finally {
       setIsSending(false);
     }
-  }, [activeFile, fileContent, chatPrompt, isSending, onPatchReceived, activeAiSelection]);
+  }, [activeFile, fileContent, chatPrompt, isSending, locale, onPatchReceived, activeAiSelection]);
+
+  const stopChatMessage = useCallback(async () => {
+    if (!activeFile) return;
+    const api = resolveElectronApi();
+    if (!api?.aiChatCancel) return;
+    await api.aiChatCancel(`markdown-to-pdf:${activeFile}`);
+  }, [activeFile]);
 
   const clearActiveFileChat = useCallback(() => {
     if (!activeFile) return;
@@ -244,6 +277,7 @@ export function MarkdownToPdfChatProvider({
       toggleChatOpen,
       closeChat,
       sendChatMessage,
+      stopChatMessage,
       clearActiveFileChat,
     }),
     [
@@ -258,6 +292,7 @@ export function MarkdownToPdfChatProvider({
       toggleChatOpen,
       closeChat,
       sendChatMessage,
+      stopChatMessage,
       clearActiveFileChat,
     ],
   );

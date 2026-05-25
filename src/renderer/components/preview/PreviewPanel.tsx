@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { MarkdownMath } from "@/components/markdown/MarkdownMath";
 import { UmlDiagramPreview } from "@/components/preview/UmlDiagramPreview";
+import { VaultPlaygroundOpenButton } from "@/components/vault/VaultPlaygroundDrawer";
 import { Button } from "@/components/ui/button";
 import { usePlantUmlPreview } from "@/hooks/usePlantUmlPreview";
 import { getUmlPreviewZoom } from "@/lib/umlPreviewZoom";
@@ -13,6 +14,7 @@ type PreviewPanelProps = {
   /** Save Kroki-rendered PNG into the active chat workspace (Electron). */
   canSavePngToChat?: boolean;
   onSaveRenderedPng?: (dataUrl: string) => void;
+  showVaultPlayground?: boolean;
 };
 
 function isMarkdownFilename(file: string): boolean {
@@ -25,6 +27,7 @@ export function PreviewPanel({
   documentContent,
   canSavePngToChat,
   onSaveRenderedPng,
+  showVaultPlayground = false,
 }: PreviewPanelProps) {
   const isUmlFile = activeFile.endsWith(".puml");
   const isMarkdownPreview = isMarkdownFilename(activeFile);
@@ -54,11 +57,14 @@ export function PreviewPanel({
     <div className="flex h-full min-h-0 flex-col border-l border-zinc-200 bg-[#fefefe] dark:border-zinc-700 dark:bg-zinc-950">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 bg-[#fefefe] px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950">
         <span className="text-sm font-semibold">Preview</span>
-        {isUmlFile && canSavePngToChat && onSaveRenderedPng ? (
-          <Button type="button" size="sm" disabled={!lastBlob} onClick={handleSavePngToChat}>
-            Save PNG to chat
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {showVaultPlayground ? <VaultPlaygroundOpenButton /> : null}
+          {isUmlFile && canSavePngToChat && onSaveRenderedPng ? (
+            <Button type="button" size="sm" disabled={!lastBlob} onClick={handleSavePngToChat}>
+              Save PNG to chat
+            </Button>
+          ) : null}
+        </div>
       </div>
       <div className="min-h-0 flex-1 p-2">
         {isUmlFile ? (

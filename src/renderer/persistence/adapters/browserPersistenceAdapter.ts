@@ -46,6 +46,7 @@ class BrowserConversationDocumentStore implements ConversationDocumentStore {
       history: [],
       chatMessages: [],
       chatTabs: meta.chatTabs?.map((tab) => ({ id: tab.id, title: tab.title, messages: [] })),
+      openChatTabIds: meta.openChatTabIds,
       activeChatTabId: meta.activeChatTabId,
       savedSnapshot: meta.savedSnapshot ?? {},
       openEditorTabs: meta.openEditorTabs ?? [],

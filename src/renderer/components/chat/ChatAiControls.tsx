@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Mic, MicOff, SendHorizontal } from "lucide-react";
+import { Mic, MicOff, SendHorizontal, Square } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -8,8 +8,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import type { ChatSystemTone } from "@/types";
 import type { LocalAiModelOption, LocalAiProviderOption, LocalAiSelection } from "@/types/electron-api";
 import { adjustChatTextareaHeight, handleChatTextareaKeyDown } from "@/lib/chatTextarea";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
+import { useEditorStore } from "@/state/store";
 
 export type ChatAiControlsProps = {
   selection?: LocalAiSelection | undefined;
@@ -18,7 +21,9 @@ export type ChatAiControlsProps = {
   disabled?: boolean;
   submitDisabled?: boolean;
   onSubmit: (prompt: string) => Promise<void> | void;
-  onSystemMessage?: (message: string) => void;
+  onStop?: () => void | Promise<void>;
+  onSystemMessage?: (message: string, tone?: ChatSystemTone) => void;
+  onLoadingChange?: (loading: boolean) => void;
 };
 
 type LoadState =
@@ -27,21 +32,14 @@ type LoadState =
   | { status: "no-bridge" }
   | { status: "empty" };
 
-type SpeechRecognitionInstance = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  onresult: ((event: Event) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-};
-
-type SpeechRecognitionCtor = new () => SpeechRecognitionInstance;
-
 function resolveElectronApi(): Window["electronApi"] | undefined {
   return typeof window !== "undefined" ? window.electronApi : undefined;
+}
+
+function appendTranscript(current: string, segment: string): string {
+  const trimmed = segment.trim();
+  if (!trimmed) return current;
+  return current ? `${current} ${trimmed}` : trimmed;
 }
 
 export function ChatAiControls({
@@ -51,18 +49,44 @@ export function ChatAiControls({
   disabled,
   submitDisabled,
   onSubmit,
+  onStop,
   onSystemMessage,
+  onLoadingChange,
 }: ChatAiControlsProps) {
+  const locale = useEditorStore((s) => s.locale);
+  const stopLabel = locale === "pt" ? "Interromper geração" : "Stop generating";
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const keepListeningRef = useRef(false);
 
-  const hasSpeechRecognition =
-    typeof window !== "undefined" &&
-    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+  const handleFinalTranscript = useCallback((text: string) => {
+    setPrompt((current) => appendTranscript(current, text));
+  }, []);
+
+  const {
+    isListening,
+    interimTranscript,
+    isTranscribing,
+    isModelLoading,
+    hasVoiceInput,
+    stopListening,
+    clearInterimTranscript,
+    toggleVoiceInput,
+    strings: voiceStrings,
+  } = useVoiceInput({
+    locale,
+    onSystemMessage,
+    onFinalTranscript: handleFinalTranscript,
+  });
+
+  const displayValue =
+    interimTranscript.length > 0
+      ? prompt
+        ? `${prompt} ${interimTranscript}`
+        : interimTranscript
+      : prompt;
+
+  const hasSendableText = Boolean(prompt.trim() || interimTranscript.trim());
 
   const [loadState, setLoadState] = useState<LoadState>(() => {
     const api = resolveElectronApi();
@@ -111,19 +135,17 @@ export function ChatAiControls({
 
   useLayoutEffect(() => {
     adjustChatTextareaHeight(textareaRef.current, 1, 10);
-  }, [prompt]);
+  }, [displayValue]);
 
   useEffect(() => {
-    return () => {
-      keepListeningRef.current = false;
-      recognitionRef.current?.stop();
-    };
-  }, []);
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
 
   const handleSubmit = useCallback(
     async (value?: string) => {
-      const text = (value ?? prompt).trim();
+      const text = (value ?? displayValue).trim();
       if (!text || loading || disabled || submitDisabled) return;
+      stopListening();
       setLoading(true);
       setPrompt("");
       try {
@@ -132,67 +154,16 @@ export function ChatAiControls({
         setLoading(false);
       }
     },
-    [prompt, loading, disabled, submitDisabled, onSubmit],
+    [displayValue, loading, disabled, submitDisabled, onSubmit, stopListening],
   );
 
-  const toggleVoiceInput = useCallback(() => {
-    if (!hasSpeechRecognition) {
-      onSystemMessage?.("Voice input is not supported by this browser.");
-      return;
-    }
-
-    if (isListening) {
-      keepListeningRef.current = false;
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
-    const SpeechRecognitionApi = (
-      window as Window & {
-        SpeechRecognition?: SpeechRecognitionCtor;
-        webkitSpeechRecognition?: SpeechRecognitionCtor;
-      }
-    ).SpeechRecognition ??
-      (window as Window & { webkitSpeechRecognition?: SpeechRecognitionCtor })
-        .webkitSpeechRecognition;
-
-    if (!SpeechRecognitionApi) return;
-
-    const recognition = new SpeechRecognitionApi();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = "pt-BR";
-    recognition.onresult = (event: Event) => {
-      const speechEvent = event as Event & {
-        results: ArrayLike<ArrayLike<{ transcript: string }>>;
-      };
-      const latest =
-        speechEvent.results[speechEvent.results.length - 1]?.[0]?.transcript?.trim();
-      if (!latest) return;
-      setPrompt((current) => (current ? `${current} ${latest}` : latest));
-    };
-    recognition.onerror = () => {
-      if (!keepListeningRef.current) {
-        setIsListening(false);
-        return;
-      }
-      recognition.stop();
-    };
-    recognition.onend = () => {
-      if (!keepListeningRef.current) {
-        setIsListening(false);
-        return;
-      }
-      recognition.start();
-    };
-    recognitionRef.current = recognition;
-    keepListeningRef.current = true;
-    recognition.start();
-    setIsListening(true);
-  }, [hasSpeechRecognition, isListening, onSystemMessage]);
+  const handleStop = useCallback(async () => {
+    if (!loading || !onStop) return;
+    await onStop();
+  }, [loading, onStop]);
 
   const isDisabled = disabled || loading;
+  const canStop = loading && Boolean(onStop);
 
   const activeProvider =
     loadState.status === "loaded"
@@ -221,13 +192,25 @@ export function ChatAiControls({
     onSelectionChange({ provider: activeProvider, modelId });
   }
 
+  function handlePromptChange(nextValue: string) {
+    setPrompt(nextValue);
+    if (interimTranscript.length > 0) {
+      clearInterimTranscript();
+    }
+  }
+
+  const interimPreview =
+    interimTranscript.length > 48
+      ? `${interimTranscript.slice(0, 48)}…`
+      : interimTranscript;
+
   return (
     <div className="flex flex-col gap-2">
       <textarea
         ref={textareaRef}
         placeholder={placeholder}
-        value={prompt}
-        onChange={(event) => setPrompt(event.target.value)}
+        value={displayValue}
+        onChange={(event) => handlePromptChange(event.target.value)}
         onKeyDown={(event) =>
           handleChatTextareaKeyDown(event, {
             onSubmit: (value) => {
@@ -239,6 +222,30 @@ export function ChatAiControls({
         disabled={isDisabled}
         className="w-full resize-none rounded-md border border-zinc-200 bg-[#fefefe] px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
       />
+      {isListening || isModelLoading ? (
+        <div
+          className="flex min-w-0 items-center gap-2 text-xs"
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500"
+            aria-hidden="true"
+          />
+          <span className="font-medium text-zinc-600 dark:text-zinc-400">
+            {isModelLoading
+              ? voiceStrings.modelLoading
+              : isTranscribing
+                ? voiceStrings.transcribing
+                : voiceStrings.listening}
+          </span>
+          {isTranscribing && interimPreview ? (
+            <span className="min-w-0 truncate italic text-zinc-500 dark:text-zinc-500">
+              &ldquo;{interimPreview}&rdquo;
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           {loadState.status === "loaded" && onSelectionChange ? (
@@ -289,15 +296,16 @@ export function ChatAiControls({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {hasSpeechRecognition ? (
+          {hasVoiceInput ? (
             <Button
               type="button"
               size="sm"
               variant={isListening ? "default" : "secondary"}
               disabled={isDisabled}
               onClick={toggleVoiceInput}
-              aria-label={isListening ? "Stop voice input" : "Start voice input"}
-              title={isListening ? "Stop voice input" : "Start voice input"}
+              aria-label={isListening ? voiceStrings.stopVoice : voiceStrings.startVoice}
+              title={isListening ? voiceStrings.stopVoice : voiceStrings.startVoice}
+              className={isListening ? "ring-2 ring-red-400/60" : undefined}
             >
               {isListening ? (
                 <MicOff className="h-4 w-4" aria-hidden="true" />
@@ -306,15 +314,28 @@ export function ChatAiControls({
               )}
             </Button>
           ) : null}
-          <Button
-            size="sm"
-            disabled={isDisabled || !!submitDisabled || !prompt.trim()}
-            onClick={() => void handleSubmit()}
-            aria-label="Send message"
-            title="Send message"
-          >
-            <SendHorizontal className="h-5 w-5" aria-hidden="true" />
-          </Button>
+          {canStop ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={() => void handleStop()}
+              aria-label={stopLabel}
+              title={stopLabel}
+            >
+              <Square className="h-4 w-4 fill-current" aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={isDisabled || !!submitDisabled || !hasSendableText}
+              onClick={() => void handleSubmit()}
+              aria-label="Send message"
+              title="Send message"
+            >
+              <SendHorizontal className="h-5 w-5" aria-hidden="true" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

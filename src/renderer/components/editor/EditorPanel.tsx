@@ -4,6 +4,11 @@ import { Pencil, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { Button } from "@/components/ui/button";
+import { useEditorStore } from "@/state/store";
+
+const diffToolbarBtnClass = "h-6 px-2 text-xs font-normal";
+const diffDiscardBtnClass = `${diffToolbarBtnClass} text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/50 dark:hover:text-red-300`;
+const diffKeepBtnClass = `${diffToolbarBtnClass} font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300`;
 
 export type AiDiffReviewToolbar = {
   proposalId: string;
@@ -11,6 +16,10 @@ export type AiDiffReviewToolbar = {
   modified: string;
   onKeep: () => void;
   onUndo: () => void;
+  onKeepAll?: () => void;
+  onDiscardAll?: () => void;
+  /** Shown in toolbar when batch actions are available. */
+  pendingCount?: number;
 };
 
 type EditorPanelProps = {
@@ -133,6 +142,26 @@ export function EditorPanel({
   const editorLanguage = language ?? languageForFile(file);
 
   const showAppliedUndoBar = !aiDiffReview && appliedAiUndo;
+  const locale = useEditorStore((s) => s.locale);
+  const diffLabels =
+    locale === "pt"
+      ? {
+          hint: "Original à esquerda, proposta à direita.",
+          esc: "Esc descarta este arquivo.",
+          discard: "Descartar",
+          keep: "Manter",
+          discardAll: "Descartar tudo",
+          keepAll: "Manter tudo",
+        }
+      : {
+          hint: "Original on the left, proposed on the right.",
+          esc: "Esc discards this file.",
+          discard: "Discard",
+          keep: "Keep",
+          discardAll: "Discard all",
+          keepAll: "Keep all",
+        };
+  const showBatchActions = Boolean(aiDiffReview?.onKeepAll && aiDiffReview?.onDiscardAll);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
@@ -200,19 +229,55 @@ export function EditorPanel({
 
       {aiDiffReview ? (
         <div
-          className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900/80"
+          className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900/80"
           role="toolbar"
-          aria-label="Revisão da alteração sugerida pela IA"
+          aria-label={locale === "pt" ? "Revisão da alteração sugerida pela IA" : "AI suggested change review"}
         >
-          <p className="text-xs text-zinc-600 dark:text-zinc-400">
-            Revisão da IA — original à esquerda, proposta à direita. <kbd className="rounded border border-zinc-300 px-1 dark:border-zinc-600">Esc</kbd> descarta.
+          <p className="min-w-0 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+            {diffLabels.hint}{" "}
+            <kbd className="rounded border border-zinc-300 px-0.5 text-[10px] dark:border-zinc-600">Esc</kbd>{" "}
+            {diffLabels.esc}
+            {showBatchActions && aiDiffReview.pendingCount ? (
+              <span className="text-zinc-400 dark:text-zinc-500"> · {aiDiffReview.pendingCount}</span>
+            ) : null}
           </p>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={aiDiffReview.onUndo}>
-              Descartar
+          <div className="flex shrink-0 items-center gap-0.5">
+            {showBatchActions ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={diffDiscardBtnClass}
+                  onClick={aiDiffReview.onDiscardAll}
+                >
+                  {diffLabels.discardAll}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={diffKeepBtnClass}
+                  onClick={aiDiffReview.onKeepAll}
+                >
+                  {diffLabels.keepAll}
+                </Button>
+                <span className="mx-0.5 h-3.5 w-px bg-zinc-300 dark:bg-zinc-600" aria-hidden="true" />
+              </>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              className={diffDiscardBtnClass}
+              onClick={aiDiffReview.onUndo}
+            >
+              {diffLabels.discard}
             </Button>
-            <Button type="button" size="sm" onClick={aiDiffReview.onKeep}>
-              Manter
+            <Button
+              type="button"
+              variant="ghost"
+              className={diffKeepBtnClass}
+              onClick={aiDiffReview.onKeep}
+            >
+              {diffLabels.keep}
             </Button>
           </div>
         </div>

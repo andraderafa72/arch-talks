@@ -18,7 +18,7 @@ export default defineConfig([
     dts: false,
     treeshake: true,
     splitting: false,
-    external: ["electron"],
+    external: ["electron", "@xenova/transformers", "onnxruntime-node", "sharp"],
     esbuildOptions(options) {
       options.alias = {
         ...options.alias,
@@ -38,6 +38,6 @@ export default defineConfig([
     dts: false,
     treeshake: true,
     splitting: false,
-    external: ["electron"],
+    external: ["electron", "@xenova/transformers", "onnxruntime-node", "sharp"],
   },
 ]);

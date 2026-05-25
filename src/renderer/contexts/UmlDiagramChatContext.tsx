@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import { applyPatch } from "@/lib/patchEngine";
+import { isAbortError, stoppedAssistantContent } from "@/lib/localAiErrors";
+import { useEditorStore } from "@/state/store";
 import type { AiEditProposal, Patch } from "@/types";
 import type { LocalAiSelection } from "@/types/electron-api";
 
@@ -34,6 +36,7 @@ type UmlDiagramChatContextValue = {
   toggleChatOpen: () => void;
   closeChat: () => void;
   sendChatMessage: (promptOverride?: string) => Promise<void>;
+  stopChatMessage: () => Promise<void>;
   clearActiveFileChat: () => void;
 };
 
@@ -68,11 +71,13 @@ export function UmlDiagramChatProvider({
   onPatchReceived,
   children,
 }: UmlDiagramChatProviderProps) {
+  const locale = useEditorStore((s) => s.locale);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatPrompt, setChatPrompt] = useState("");
   const [chatByFile, setChatByFile] = useState<Record<string, UmlDiagramChatMessage[]>>({});
   const [isSending, setIsSending] = useState(false);
   const [streamingAssistantText, setStreamingAssistantText] = useState<string | null>(null);
+  const streamingTextRef = useRef("");
   const [chatError, setChatError] = useState<string | null>(null);
   const [activeAiSelection, setActiveAiSelection] = useState<LocalAiSelection | undefined>(undefined);
   const activeStreamIdRef = useRef<string | null>(null);
@@ -87,6 +92,7 @@ export function UmlDiagramChatProvider({
     if (!api?.subscribeAiChatStream) return;
     return api.subscribeAiChatStream((payload) => {
       if (payload.streamId === activeStreamIdRef.current) {
+        streamingTextRef.current = payload.text;
         setStreamingAssistantText(payload.text);
       }
     });
@@ -142,6 +148,7 @@ export function UmlDiagramChatProvider({
     const sessionKey = `uml-render:${snapshotFile}`;
     const streamId = crypto.randomUUID();
     activeStreamIdRef.current = streamId;
+    streamingTextRef.current = "";
     setStreamingAssistantText("");
 
     try {
@@ -154,6 +161,7 @@ export function UmlDiagramChatProvider({
         streamId,
       });
       activeStreamIdRef.current = null;
+      streamingTextRef.current = "";
       setStreamingAssistantText(null);
       const assistantMessage: UmlDiagramChatMessage = {
         id: crypto.randomUUID(),
@@ -188,7 +196,25 @@ export function UmlDiagramChatProvider({
       }
     } catch (err: unknown) {
       activeStreamIdRef.current = null;
+      const partial = streamingTextRef.current;
+      streamingTextRef.current = "";
       setStreamingAssistantText(null);
+      if (isAbortError(err)) {
+        const stoppedContent = stoppedAssistantContent(partial, locale);
+        if (stoppedContent) {
+          const assistantMessage: UmlDiagramChatMessage = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: stoppedContent,
+            timestamp: new Date().toISOString(),
+          };
+          setChatByFile((prev) => ({
+            ...prev,
+            [snapshotFile]: [...(prev[snapshotFile] ?? []), assistantMessage],
+          }));
+        }
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Erro ao contatar IA local.";
       setChatError(msg);
       const errMessage: UmlDiagramChatMessage = {
@@ -204,7 +230,14 @@ export function UmlDiagramChatProvider({
     } finally {
       setIsSending(false);
     }
-  }, [activeFile, fileContent, chatPrompt, isSending, onPatchReceived, activeAiSelection]);
+  }, [activeFile, fileContent, chatPrompt, isSending, locale, onPatchReceived, activeAiSelection]);
+
+  const stopChatMessage = useCallback(async () => {
+    if (!activeFile) return;
+    const api = resolveElectronApi();
+    if (!api?.aiChatCancel) return;
+    await api.aiChatCancel(`uml-render:${activeFile}`);
+  }, [activeFile]);
 
   const clearActiveFileChat = useCallback(() => {
     if (!activeFile) return;
@@ -243,6 +276,7 @@ export function UmlDiagramChatProvider({
       toggleChatOpen,
       closeChat,
       sendChatMessage,
+      stopChatMessage,
       clearActiveFileChat,
     }),
     [
@@ -257,6 +291,7 @@ export function UmlDiagramChatProvider({
       toggleChatOpen,
       closeChat,
       sendChatMessage,
+      stopChatMessage,
       clearActiveFileChat,
     ],
   );

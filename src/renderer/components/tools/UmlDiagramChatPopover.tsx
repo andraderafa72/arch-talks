@@ -21,6 +21,7 @@ export function UmlDiagramChatPopover() {
     toggleChatOpen,
     closeChat,
     sendChatMessage,
+    stopChatMessage,
     clearActiveFileChat,
     isSending,
     streamingAssistantText,
@@ -139,6 +140,7 @@ export function UmlDiagramChatPopover() {
                 placeholder="Descreva o diagrama ou a mudança desejada..."
                 disabled={!activeFile || isSending}
                 onSubmit={sendChatMessage}
+                onStop={stopChatMessage}
               />
             </div>
           </div>

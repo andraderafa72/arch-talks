@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+.window-drag-region {
+  -webkit-app-region: drag;
+}
+
+.window-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 :root {
   font-family:
     Inter,
@@ -23,6 +31,30 @@ body,
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 2px;
+  margin-inline: 2px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #d4d4d8;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #a1a1aa;
 }
 
 body {
@@ -37,4 +69,18 @@ body {
 .theme-dark {
   background: #0b0e14;
   color: #f4f4f5;
+}
+
+@variant dark {
+  * {
+    scrollbar-color: #52525b transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #52525b;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #71717a;
+  }
 }

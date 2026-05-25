@@ -1,8 +1,9 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, session } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { removeLegacyPersistenceLayout } from "./architectureFileIo.ts";
+import { attachWindowChromeListeners, registerWindowControlsIpc } from "./main/ipc/windowControls.ts";
 import { registerAllIpc } from "./main/registerAllIpc.ts";
 import { shutdownAiRuntime, tryBeginAiRuntimeShutdown } from "./main/localAiRuntime.ts";
 
@@ -16,17 +17,22 @@ const preloadPath = isDev
   : path.join(__dirname, "preload.cjs");
 
 registerAllIpc();
+registerWindowControlsIpc();
 
 const createWindow = () => {
   const win = new BrowserWindow({
     width: 1600,
     height: 900,
+    frame: false,
+    backgroundColor: "#fefefe",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+
+  attachWindowChromeListeners(win);
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
   if (devServerUrl) {
@@ -37,6 +43,13 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === "media");
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    return permission === "media";
+  });
+
   void removeLegacyPersistenceLayout();
   createWindow();
   app.on("activate", () => {

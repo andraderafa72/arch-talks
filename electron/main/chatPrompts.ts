@@ -1,3 +1,24 @@
+const PATCH_YAML_INSTRUCTIONS = (activeFile: string) => `When you want to propose edits to a file, include a YAML code block with the following structure:
+
+\`\`\`yaml
+patch:
+  file: ${activeFile}
+  changes:
+    - type: replace_all
+      content: |
+        <full new content>
+\`\`\`
+
+Available change types:
+- \`replace_all\`: Replace the entire file content
+- \`replace_block\`: Replace a specific block; requires \`target\` and \`content\`
+- \`insert_after\`: Insert content after an anchor text; requires \`anchor\` and \`content\`
+- \`insert_before\`: Insert content before an anchor text; requires \`anchor\` and \`content\`
+
+Use \`|\` block scalars for multiline \`content\`.
+If no file change is needed, respond with plain text only, without any YAML block.
+When you include a patch, use exactly one \`\`\`yaml code block with the full patch — do not repeat the same YAML later in the message, and do not paste raw YAML outside the fence.`;
+
 export function buildWorkspaceChatSystemPrompt(activeFile: string, files: Record<string, string>): string {
   const fileEntries = Object.entries(files)
     .map(([name, content]) => `### ${name}\n\`\`\`\n${content}\n\`\`\``)
@@ -9,27 +30,7 @@ Active file: ${activeFile}
 Files in the workspace:
 ${fileEntries}
 
-When you want to propose edits to a file, include a JSON code block with the following structure:
-
-\`\`\`json
-{
-  "patch": {
-    "file": "${activeFile}",
-    "changes": [
-      { "type": "replace_all", "content": "<full new content>" }
-    ]
-  }
-}
-\`\`\`
-
-Available change types:
-- \`replace_all\`: Replace the entire file content
-- \`replace_block\`: Replace a specific block; requires \`target\` and \`content\`
-- \`insert_after\`: Insert content after an anchor text; requires \`anchor\` and \`content\`
-- \`insert_before\`: Insert content before an anchor text; requires \`anchor\` and \`content\`
-
-If no file change is needed, respond with plain text only, without any JSON block.
-When you include a patch, use exactly one \`\`\`json code block with the full patch object — do not repeat the same JSON later in the message, and do not paste raw JSON outside the fence.
+${PATCH_YAML_INSTRUCTIONS(activeFile)}
 Keep responses concise and focused.`;
 }
 
@@ -43,27 +44,7 @@ Current file content:
 ${fileContent}
 \`\`\`
 
-When you want to propose edits to the file, include a JSON code block with the following structure:
-
-\`\`\`json
-{
-  "patch": {
-    "file": "${activeFile}",
-    "changes": [
-      { "type": "replace_all", "content": "<full new content>" }
-    ]
-  }
-}
-\`\`\`
-
-Available change types:
-- \`replace_all\`: Replace the entire file content (use for large rewrites)
-- \`replace_block\`: Replace a specific block; requires \`target\` (exact text to replace) and \`content\`
-- \`insert_after\`: Insert content after an anchor text; requires \`anchor\` and \`content\`
-- \`insert_before\`: Insert content before an anchor text; requires \`anchor\` and \`content\`
-
-If no file change is needed, respond with plain text only, without any JSON block.
-When you include a patch, use exactly one \`\`\`json code block with the full patch object — do not repeat the same JSON later in the message, and do not paste raw JSON outside the fence.
+${PATCH_YAML_INSTRUCTIONS(activeFile)}
 Keep responses concise and focused.`;
 }
 
@@ -77,27 +58,318 @@ Current diagram source:
 ${fileContent}
 \`\`\`
 
-When you want to propose edits to the file, include a JSON code block with the following structure:
-
-\`\`\`json
-{
-  "patch": {
-    "file": "${activeFile}",
-    "changes": [
-      { "type": "replace_all", "content": "<full new PlantUML source>" }
-    ]
-  }
-}
-\`\`\`
-
-Available change types:
-- \`replace_all\`: Replace the entire file content (common for diagram rewrites)
-- \`replace_block\`: Replace a specific block; requires \`target\` (exact text) and \`content\`
-- \`insert_after\`: Insert after an anchor line; requires \`anchor\` and \`content\`
-- \`insert_before\`: Insert before an anchor line; requires \`anchor\` and \`content\`
+${PATCH_YAML_INSTRUCTIONS(activeFile)}
 
 Output valid PlantUML when proposing full files (e.g. @startuml … @enduml, or other supported diagram types).
-If no file change is needed, respond with plain text only, without any JSON block.
-When you include a patch, use exactly one \`\`\`json code block with the full patch object — do not repeat the same JSON later in the message, and do not paste raw JSON outside the fence.
 Keep responses concise and focused.`;
+}
+
+const VAULT_SUBJECT_MATTER = `## Subject matter (critical)
+- Extract and plan knowledge only for the domain the user describes in their messages and optional reference material.
+- Do not assume user input refers to the vault editor, ingestion chat, host application, or any tool that runs this session unless the user names it explicitly.
+- In a technical vault, first-level "application" folders document named software systems in the user's knowledge base — not the program hosting this chat.
+- Existing vault notes are context about what is already stored; do not treat them as the topic of the current message unless the user's text clearly matches that topic.`;
+
+function vaultCategoryBlock(category: "business" | "technical" | "project"): string {
+  return `## Vault category (immutable)
+This vault is a **${category}** vault. The vault root is the user directory on disk.
+All paths are relative to that root. Do not add a category prefix folder (no business/, technical/, or projects/ wrapper).
+Follow the category skill for first-level folder semantics and placement.`;
+}
+
+const VAULT_STRUCTURE_RULES = `## Current vault structure (mandatory context)
+- **Read** the structure report and vault file paths below before every decision.
+- **Reuse** existing folders and naming patterns; do not invent parallel folder trees for the same domain.
+- **Prefer** \`updates\` for paths that already exist; use \`creates\` only for new paths.
+- **Respect** per-folder note limits and overview requirements (see planning skills).
+- **Align** new paths with \`vault_hint\` from topic analysis and with the category placement rules.
+- When a folder has an overview file (\`*-overview.md\` or legacy \`overview.md\`), plan an \`updates\` entry for that overview when adding child notes (wikilinks in \`## Where to go deeper\`; refresh the quick context preview).
+- **Every subfolder** that receives new topic notes must have a \`<folder-segment>-overview.md\` (create if missing, update if present). New overviews must include a quick context preview (blockquote or \`## Quick context\`).
+- **Skip** knowledge already ingested in this chat or already present in the vault unless the user explicitly asks to revise it.`;
+
+function appendAlreadyGeneratedContext(base: string, alreadyGeneratedContext?: string): string {
+  const extra = alreadyGeneratedContext?.trim();
+  if (!extra) return base;
+  return `${base}\n\n${extra}`;
+}
+
+export function buildTopicAnalysisSystemPrompt(options: {
+  category: "business" | "technical" | "project";
+  semanticSkills: string;
+  planningSkills: string;
+  structureReport: string;
+  files: Record<string, string>;
+  alreadyGeneratedContext?: string;
+}): string {
+  const fileListing = Object.keys(options.files).sort().join("\n") || "(empty vault)";
+  return appendAlreadyGeneratedContext(
+    `You are a knowledge vault topic analyst (phase 1 of ingestion).
+
+${VAULT_SUBJECT_MATTER}
+
+${vaultCategoryBlock(options.category)}
+
+${VAULT_STRUCTURE_RULES}
+
+## Your task
+Enumerate every independently extractable durable topic in the source text. One topic = one future vault note.
+Do not write note bodies or full vault paths.
+For each topic, set \`vault_hint\` to the **existing folder** where the note should live (from the structure report), or a new folder path segment that fits current layout.
+
+${options.semanticSkills}
+
+${options.planningSkills}
+
+## Current vault structure (report)
+${options.structureReport}
+
+## Vault file paths (complete listing)
+${fileListing}
+
+## Output (mandatory)
+Respond with **exactly one** \`\`\`yaml fenced block containing \`topicAnalysis\` only.
+No conversational text before or after the fence.
+See semantic/05-yaml-output-contract.md for the schema.`,
+    options.alreadyGeneratedContext,
+  );
+}
+
+export function buildTopicAnalysisPrompt(options: {
+  userPrompt: string;
+  sourceText: string;
+  structureReport: string;
+  alreadyGeneratedContext?: string;
+}): string {
+  return appendAlreadyGeneratedContext(
+    `## Latest user message
+${options.userPrompt}
+
+## Conversation and source text (full)
+${options.sourceText}
+
+## Reminder — current vault structure
+Review the structure report and file paths in the system prompt before listing topics.
+Set each topic's \`vault_hint\` to match an existing folder when the knowledge belongs there; avoid duplicate topics for notes that already exist.
+Extract only topics not already covered by prior ingestion in this chat or by existing vault files.
+
+${options.structureReport}
+
+Emit topicAnalysis YAML listing all durable topics that still need extraction.`,
+    options.alreadyGeneratedContext,
+  );
+}
+
+export function buildBatchExtractionSystemPrompt(options: {
+  category: "business" | "technical" | "project";
+  planningSkills: string;
+  structureReport: string;
+  activeFile: string;
+  files: Record<string, string>;
+  alreadyGeneratedContext?: string;
+}): string {
+  const fileListing = Object.keys(options.files).sort().join("\n") || "(empty vault)";
+  const activeSnippet = options.files[options.activeFile]
+    ? `### ${options.activeFile}\n\`\`\`\n${options.files[options.activeFile]}\n\`\`\``
+    : "(active file empty or missing)";
+
+  return appendAlreadyGeneratedContext(
+    `You are a knowledge vault file writer (phase 2 extraction).
+
+${VAULT_SUBJECT_MATTER}
+
+${vaultCategoryBlock(options.category)}
+
+${VAULT_STRUCTURE_RULES}
+
+${options.planningSkills}
+
+## Current vault structure (report)
+${options.structureReport}
+
+## Vault file paths (complete listing)
+${fileListing}
+
+## Active file
+${activeSnippet}
+
+## Output (mandatory)
+Respond with **exactly one** \`\`\`yaml fenced block containing \`vaultIngestionPlan\` only.
+No conversational text before or after the fence.
+Cover **every** topic from the assigned topic table in this single response.
+Set \`batch_index: 1\` and \`batch_total: 1\` on the plan.
+Declare \`files_total_count\` — the exact number of create/update entries you emit (topic notes **plus** folder overview files). The host validates entry count against this field; it is **not** the same as topic count.
+Every subfolder that receives new notes must include an overview file entry (\`<segment>-overview.md\` create or update; see shared/05-overview-files.md).
+Overview updates count as separate entries when required.
+Use \`|\` block scalars for multiline \`content\`.
+Do not put YAML frontmatter inside \`content\` — the host adds confidence and keywords.
+See semantic/05-yaml-output-contract.md.`,
+    options.alreadyGeneratedContext,
+  );
+}
+
+export function buildBatchExtractionPrompt(options: {
+  userPrompt: string;
+  sourceText: string;
+  structureReport: string;
+  batchTopics: { id: string; title: string; type: string; source_anchor?: string; vault_hint?: string }[];
+  analysisSummary: string;
+  alreadyGeneratedContext?: string;
+}): string {
+  const topicTable = options.batchTopics
+    .map(
+      (t) =>
+        `| ${t.id} | ${t.title} | ${t.type} | ${t.vault_hint ?? ""} | ${t.source_anchor ?? ""} |`,
+    )
+    .join("\n");
+
+  return appendAlreadyGeneratedContext(
+    `## vaultIngestionPlan (single response)
+Analysis summary: ${options.analysisSummary}
+
+Extract vault notes for **all** topics below in one \`vaultIngestionPlan\` YAML block.
+Set \`batch_index: 1\` and \`batch_total: 1\`.
+
+Before emitting YAML, count every file you will create or update:
+- one topic note per row in the table (\`topic_id\` required on those entries)
+- one \`<segment>-overview.md\` (create or update) for **each subfolder** that receives new topic notes, each with a quick context preview
+
+Set \`files_total_count\` to that total. The number of \`creates\` + \`updates\` entries must equal \`files_total_count\`. This total is **not** the topic count.
+
+| id | title | type | vault_hint | source_anchor |
+|----|-------|------|------------|---------------|
+${topicTable}
+
+## Latest user message
+${options.userPrompt}
+
+## Conversation and source text (full)
+${options.sourceText}
+
+## Reminder — current vault structure
+Use paths under existing folders from the system prompt structure report. Put entries in \`updates\` when the path already exists; use \`creates\` for new paths only. Every subfolder with new notes must have a \`*-overview.md\` entry (prefer \`<segment>-overview.md\`; update legacy \`overview.md\` if that is what exists).
+Do not recreate files or topics already generated in prior ingestion runs unless the user asked to revise them.
+
+${options.structureReport}
+
+Emit vaultIngestionPlan YAML with \`files_total_count\` matching the number of create/update entries.
+Cover every topic in the table with a topic note entry. Overview-only entries omit \`topic_id\`.`,
+    options.alreadyGeneratedContext,
+  );
+}
+
+export function buildVaultConversationalPrompt(options: {
+  category: "business" | "technical" | "project";
+  semanticSkills: string;
+  planningSkills: string;
+  structureReport: string;
+  activeFile: string;
+  files: Record<string, string>;
+  referenceExcerpt?: string;
+}): string {
+  const fileListing = Object.keys(options.files).sort().join("\n") || "(empty vault)";
+  const activeSnippet = options.files[options.activeFile]
+    ? `### ${options.activeFile}\n\`\`\`\n${options.files[options.activeFile]}\n\`\`\``
+    : "(active file empty or missing)";
+
+  const referenceBlock = options.referenceExcerpt
+    ? `\n## Reference folder excerpt\n${options.referenceExcerpt}\n`
+    : "";
+
+  return `You are a knowledge vault assistant. Help the user explore and plan vault content.
+
+${VAULT_SUBJECT_MATTER}
+
+${vaultCategoryBlock(options.category)}
+
+${options.semanticSkills}
+
+${options.planningSkills}
+
+${VAULT_STRUCTURE_RULES}
+
+## Current vault structure (report)
+${options.structureReport}
+
+## Vault file paths (complete listing)
+${fileListing}
+
+## Active file
+${activeSnippet}
+${referenceBlock}
+## Behavior
+- Use chat to gather context and clarify ambiguous input.
+- Do not emit topicAnalysis or vaultIngestionPlan YAML unless the user explicitly asks to ingest or import knowledge into the vault.
+- Do not use patch format. Do not claim files were written.
+- Keep replies concise and focused.`;
+}
+
+/** @deprecated use buildTopicAnalysisSystemPrompt / buildBatchExtractionSystemPrompt */
+export function buildVaultIngestionPrompt(options: {
+  category: "business" | "technical" | "project";
+  semanticSkills: string;
+  planningSkills: string;
+  structureReport: string;
+  activeFile: string;
+  files: Record<string, string>;
+  referenceExcerpt?: string;
+}): string {
+  return buildVaultConversationalPrompt(options);
+}
+
+const VAULT_CONSUMPTION_SNIPPET_MAX = 4_000;
+const VAULT_CONSUMPTION_MAX_FILES = 40;
+
+function truncateForPrompt(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}\n\n… (truncated)`;
+}
+
+export function buildVaultConsumptionPrompt(options: {
+  skillContent: string;
+  skillName: string;
+  vaultName?: string;
+  activeFile: string;
+  files: Record<string, string>;
+}): string {
+  const paths = Object.keys(options.files).sort();
+  const fileListing = paths.length > 0 ? paths.join("\n") : "(empty vault)";
+
+  const prioritized = [...paths].sort((a, b) => {
+    if (a === options.activeFile) return -1;
+    if (b === options.activeFile) return 1;
+    return a.localeCompare(b);
+  });
+
+  const bodyPaths = prioritized.slice(0, VAULT_CONSUMPTION_MAX_FILES);
+  const fileBodies = bodyPaths
+    .map((rel) => {
+      const content = options.files[rel] ?? "";
+      const limit = rel === options.activeFile ? VAULT_CONSUMPTION_SNIPPET_MAX : Math.min(2_000, VAULT_CONSUMPTION_SNIPPET_MAX);
+      return `### ${rel}\n\`\`\`markdown\n${truncateForPrompt(content, limit)}\n\`\`\``;
+    })
+    .join("\n\n");
+
+  const vaultLabel = options.vaultName?.trim() ? `Vault: ${options.vaultName.trim()}` : "Knowledge vault";
+
+  return `You are a vault consumption assistant. You help the user explore, search, and understand notes in an Obsidian-style knowledge vault using a local model.
+
+${vaultLabel}
+Active file: ${options.activeFile || "(none)"}
+
+## Applied skill — ${options.skillName}
+
+${options.skillContent}
+
+## Vault note paths
+${fileListing}
+
+## Note contents
+${fileBodies || "(no readable notes)"}
+
+## Behavior
+- Answer from vault content only. Do not invent paths or note text.
+- When citing notes, use vault-relative paths (e.g. \`folder/note.md\`) so the user can open them.
+- Prefer markdown lists with **bold paths** for search results, per the skill format.
+- Do not emit ingestion YAML, vault plans, or file patches — plain conversational markdown only.
+- Keep answers focused and cite the most relevant notes.`;
 }

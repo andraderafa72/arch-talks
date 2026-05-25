@@ -6,13 +6,23 @@ import type {
   ConversationKind,
   Patch,
   TechnicalTemplate,
+  VaultPlanProposal,
 } from "@/types";
+import { isMarkdownVaultPath } from "@/lib/vaultPaths";
+
+function defaultVaultActiveFile(files: Record<string, string>): string {
+  if (files["vault-overview.md"]) return "vault-overview.md";
+  const markdown = Object.keys(files).filter(isMarkdownVaultPath).sort();
+  if (markdown[0]) return markdown[0];
+  return Object.keys(files).sort()[0] ?? "";
+}
 
 type ApiChatMessage = {
   id: string;
   role: string;
   content: string;
   timestamp: string;
+  systemTone?: "info" | "warning" | "error";
 };
 
 type ApiCommit = {
@@ -29,6 +39,7 @@ export type ApiConversationRow = {
   kind: string;
   templateId?: string | null;
   fileCount?: number;
+  createdAt?: string;
   updatedAt?: string;
   files?: Record<string, string>;
   activeFile?: string;
@@ -41,8 +52,15 @@ export type ApiConversationRow = {
     messages?: ApiChatMessage[];
   }>;
   activeChatTabId?: string;
+  openChatTabIds?: string[];
   savedSnapshot?: Record<string, string>;
   openEditorTabs?: string[];
+  referenceFolderPath?: string;
+  referenceExcerpt?: string;
+  pendingVaultProposal?: VaultPlanProposal | null;
+  vaultName?: string;
+  vaultRootPath?: string;
+  vaultCategory?: import("@/types/electron-api").VaultCategory;
 };
 
 function normalizeOpenEditorTabsForConversation(
@@ -60,11 +78,16 @@ function normalizeOpenEditorTabsForConversation(
 
 function mapChatMessage(row: ApiChatMessage): ChatMessage {
   const role = row.role === "user" || row.role === "assistant" || row.role === "system" ? row.role : "system";
+  const systemTone =
+    row.systemTone === "info" || row.systemTone === "warning" || row.systemTone === "error"
+      ? row.systemTone
+      : undefined;
   return {
     id: row.id,
     role,
     content: row.content,
     timestamp: row.timestamp,
+    ...(role === "system" && systemTone ? { systemTone } : {}),
   };
 }
 
@@ -117,23 +140,34 @@ function mapCommit(row: ApiCommit): Commit {
 }
 
 export function mapApiConversation(row: ApiConversationRow): Conversation {
-  const kind: ConversationKind = row.kind === "uml" ? "uml" : "technical_document";
+  const kind: ConversationKind =
+    row.kind === "uml" ? "uml" : row.kind === "vault" ? "vault" : "technical_document";
   const files = row.files && Object.keys(row.files).length > 0 ? { ...row.files } : {};
   const activeFile =
-    row.activeFile && files[row.activeFile]
+    row.activeFile &&
+    (files[row.activeFile] ||
+      row.pendingVaultProposal?.changes.some((c) => c.path === row.activeFile) ||
+      (kind === "vault" && Boolean(row.vaultRootPath)))
       ? row.activeFile
       : kind === "uml"
         ? Object.keys(files).find((k) => k.endsWith(".puml")) ?? "diagrams/auth-flow.puml"
-        : "main.tex";
+        : kind === "vault"
+          ? defaultVaultActiveFile(files)
+          : "main.tex";
 
   const savedSnapshot =
     row.savedSnapshot && Object.keys(row.savedSnapshot).length > 0 ? { ...row.savedSnapshot } : { ...files };
   const { chatTabs, activeChatTabId, chatMessages } = normalizeChatTabsForConversation(row);
+  const openChatTabIds =
+    row.openChatTabIds?.filter((id) => chatTabs.some((tab) => tab.id === id)) ??
+    chatTabs.map((tab) => tab.id);
 
   return {
     id: row.id,
     title: row.title,
     kind,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     templateId: row.templateId ?? null,
     files,
     activeFile,
@@ -141,9 +175,16 @@ export function mapApiConversation(row: ApiConversationRow): Conversation {
     pendingPatch: row.pendingPatch ?? null,
     history: (row.history ?? []).map(mapCommit),
     chatTabs,
+    openChatTabIds,
     activeChatTabId,
     chatMessages,
     savedSnapshot,
+    referenceFolderPath: row.referenceFolderPath,
+    referenceExcerpt: row.referenceExcerpt,
+    pendingVaultProposal: row.pendingVaultProposal ?? null,
+    vaultName: row.vaultName,
+    vaultRootPath: row.vaultRootPath,
+    vaultCategory: row.vaultCategory,
   };
 }
 

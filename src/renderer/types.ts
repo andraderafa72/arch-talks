@@ -1,3 +1,7 @@
+import type { VaultCategory } from "./types/electron-api";
+
+export type { VaultCategory };
+
 export type Patch = {
   file: string;
   changes: Change[];
@@ -38,7 +42,28 @@ export type AppliedAiEdit = {
 
 export type AppScreen = "home" | "workspace";
 
-export type ConversationKind = "uml" | "technical_document";
+export type ConversationKind = "uml" | "technical_document" | "vault";
+
+export type VaultPlanFileChange = {
+  path: string;
+  kind: "create" | "update";
+  originalContent: string;
+  proposedContent: string;
+};
+
+export type VaultPlanProposal = {
+  id: string;
+  summary: string;
+  changes: VaultPlanFileChange[];
+  timestamp: string;
+};
+
+export type AppliedVaultEdit = {
+  id: string;
+  paths: string[];
+  previousContents: Record<string, string>;
+  timestamp: string;
+};
 
 export type TechnicalTemplate = {
   id: string;
@@ -47,11 +72,16 @@ export type TechnicalTemplate = {
   files: Record<string, string>;
 };
 
+/** Visual category for `role: "system"` messages (red is reserved for errors). */
+export type ChatSystemTone = "info" | "warning" | "error";
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
+  /** When `role` is `system`, controls bubble color. Omitted values are inferred from content. */
+  systemTone?: ChatSystemTone;
 };
 
 export type ChatConversationTab = {
@@ -73,15 +103,25 @@ export type ChatDetail = {
   history: Commit[];
 };
 
+/** In-flight assistant reply for a document chat tab (survives tab switches). */
+export type ChatTabStreamState = {
+  streamId: string;
+  text: string;
+};
+
 export type ThemeMode = "light" | "dark";
 
-/** UI language for labels (stored in localStorage). */
+/** UI language for labels (stored in user preferences). */
 export type UiLocale = "en" | "pt";
 
 export type Conversation = {
   id: string;
   title: string;
   kind: ConversationKind;
+  /** ISO timestamp set when the project is first created. */
+  createdAt?: string;
+  /** ISO timestamp of the last persisted save. */
+  updatedAt?: string;
   templateId: string | null;
   files: Record<string, string>;
   activeFile: string;
@@ -91,6 +131,8 @@ export type Conversation = {
   history: Commit[];
   /** Conversation tabs shown inside the chat panel for this document. */
   chatTabs: ChatConversationTab[];
+  /** Chat tab ids shown in the tab bar (subset of `chatTabs`; closed chats stay in `chatTabs`). */
+  openChatTabIds?: string[];
   activeChatTabId: string;
   /** Backward-compatible mirror of active chat tab messages. */
   chatMessages: ChatMessage[];
@@ -99,4 +141,14 @@ export type Conversation = {
   savedSnapshot: Record<string, string>;
   /** Per-file UML preview zoom (1 = default). */
   umlPreviewZoom?: Record<string, number>;
+  referenceFolderPath?: string;
+  referenceExcerpt?: string;
+  pendingVaultProposal?: VaultPlanProposal | null;
+  lastAppliedVaultEdit?: AppliedVaultEdit | null;
+  vaultName?: string;
+  vaultRootPath?: string;
+  /** Immutable vault category (business | technical | project). */
+  vaultCategory?: VaultCategory;
+  /** All file paths on disk under the vault root (refreshed from Electron). */
+  vaultDiskPaths?: string[];
 };

@@ -82,6 +82,168 @@ export type WorkspaceChatResponse = {
   patch?: MarkdownChatPatch;
 };
 
+// ---------------------------------------------------------------------------
+// Vault ingestion
+// ---------------------------------------------------------------------------
+
+export type SemanticArtifactType =
+  | "concept"
+  | "rule"
+  | "overview"
+  | "decision"
+  | "pattern"
+  | "anti_pattern"
+  | "workflow"
+  | "entity"
+  | "glossary"
+  | "incident"
+  | "constraint"
+  | "heuristic"
+  | "mapping";
+
+export type SemanticRelationship = {
+  type:
+    | "depends_on"
+    | "extends"
+    | "contradicts"
+    | "replaces"
+    | "related_to"
+    | "caused_by"
+    | "enables"
+    | "constrained_by";
+  target: string;
+};
+
+export type VaultIngestionPlanEntry = {
+  path: string;
+  content: string;
+  topic_id?: string;
+  title?: string;
+  type?: SemanticArtifactType;
+  confidence?: "high" | "medium" | "low";
+  keywords?: string[];
+  embedding_keywords?: string[];
+  relationships?: SemanticRelationship[];
+  artifact_id?: string;
+};
+
+export type VaultIngestionPlan = {
+  summary: string;
+  batch_index?: number;
+  batch_total?: number;
+  files_total_count?: number;
+  creates: VaultIngestionPlanEntry[];
+  updates: VaultIngestionPlanEntry[];
+};
+
+export type VaultIngestionSummary = {
+  topicCount: number;
+  batches: number;
+  filesReady: number;
+  declaredFileCount?: number;
+  topics: { title: string; type: string }[];
+};
+
+export type VaultChatRequest = {
+  sessionKey: string;
+  documentId: string;
+  activeFile: string;
+  files: Record<string, string>;
+  prompt: string;
+  /** Full tab conversation; used for ingestion source text and conversational context. */
+  messages?: { role: "user" | "assistant" | "system"; content: string }[];
+  aiSelection?: LocalAiSelection;
+  streamId?: string;
+  referenceFolderPath?: string;
+  referenceExcerpt?: string;
+};
+
+export type VaultChatResponse = {
+  reply: string;
+  ingestionSummary?: VaultIngestionSummary;
+  plan?: VaultIngestionPlan;
+  validationErrors?: string[];
+  validationWarnings?: string[];
+};
+
+export type VaultConsumptionChatRequest = {
+  sessionKey: string;
+  documentId: string;
+  activeFile: string;
+  files: Record<string, string>;
+  prompt: string;
+  aiSelection?: LocalAiSelection;
+  streamId?: string;
+  skillId?: string;
+  vaultName?: string;
+};
+
+export type VaultConsumptionChatResponse = {
+  reply: string;
+};
+
+export type VaultConfirmedChange = {
+  path: string;
+  content: string;
+};
+
+export type VaultApplyPlanRequest = {
+  documentId: string;
+  changes: VaultConfirmedChange[];
+  plan?: VaultIngestionPlan;
+};
+
+export type VaultApplyPlanResponse = {
+  files: Record<string, string>;
+  updatedPaths: string[];
+};
+
+export type VaultReferenceScanResult = {
+  excerpt: string;
+  fileCount: number;
+  truncated: boolean;
+};
+
+export type VaultCategory = "business" | "technical" | "project";
+
+export type ArchVaultConfig = {
+  version: 2;
+  name: string;
+  createdAt: string;
+  documentId: string;
+  vaultRootPath: string;
+  category: VaultCategory;
+};
+
+export type VaultInitializeRequest = {
+  documentId: string;
+  name: string;
+  category: VaultCategory;
+  mode: "existing" | "new";
+  existingRootPath?: string;
+  parentPath?: string;
+  newFolderName?: string;
+};
+
+export type VaultAssignCategoryRequest = {
+  documentId: string;
+  category: VaultCategory;
+};
+
+export type VaultInitializeResponse = {
+  vaultRootPath: string;
+  archConfig: ArchVaultConfig | null;
+  vaultCategory: VaultCategory;
+  files: Record<string, string>;
+  diskPaths: string[];
+  activeFile: string;
+};
+
+export type VaultAssignCategoryResponse = {
+  vaultCategory: VaultCategory;
+  archConfig: ArchVaultConfig;
+};
+
 export type LatexOutputFormat = "pdf" | "svg";
 
 export type LatexErrorCode = "VALIDATION" | "TIMEOUT" | "TECTONIC" | "IO" | "UNSUPPORTED";
@@ -111,6 +273,7 @@ export type FsTreeNode = {
 
 export type ElectronApi = {
   platform: string;
+  isFramelessShell?: boolean;
   renderLatex: (req: LatexRenderRequest) => Promise<LatexRenderResult>;
   openPathInUserData: (p: string) => Promise<{ ok: boolean; error?: string }>;
   readArchitectureConversations: () => Promise<{ items: unknown[] }>;
@@ -144,12 +307,48 @@ export type ElectronApi = {
   printCurrentWebContentsToPdf: () => Promise<
     { ok: true; data: ArrayBuffer } | { ok: false; error: string }
   >;
+  readUserPreferences?: () => Promise<unknown | null>;
+  writeUserPreferences?: (
+    preferences: unknown,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   markdownChatSend?: (req: MarkdownChatRequest) => Promise<MarkdownChatResponse>;
   umlChatSend?: (req: UmlChatRequest) => Promise<UmlChatResponse>;
   workspaceChatSend?: (req: WorkspaceChatRequest) => Promise<WorkspaceChatResponse>;
+  vaultChatSend?: (req: VaultChatRequest) => Promise<VaultChatResponse>;
+  vaultConsumptionChatSend?: (req: VaultConsumptionChatRequest) => Promise<VaultConsumptionChatResponse>;
+  vaultApplyPlan?: (req: VaultApplyPlanRequest) => Promise<VaultApplyPlanResponse>;
+  vaultPickReferenceFolder?: () => Promise<
+    { ok: true; path: string } | { ok: false; canceled: true }
+  >;
+  vaultPickDirectory?: () => Promise<{ ok: true; path: string } | { ok: false; canceled: true }>;
+  vaultInitialize?: (req: VaultInitializeRequest) => Promise<VaultInitializeResponse>;
+  vaultAssignCategory?: (req: VaultAssignCategoryRequest) => Promise<VaultAssignCategoryResponse>;
+  vaultListPaths?: (
+    documentId: string,
+  ) => Promise<{ diskPaths: string[]; files: Record<string, string>; vaultCategory?: VaultCategory }>;
+  vaultReadFile?: (documentId: string, relativePath: string) => Promise<{ content: string }>;
+  vaultScanReferenceFolder?: (folderPath: string) => Promise<VaultReferenceScanResult>;
+  vaultSkillsList?: () => Promise<import("./vaultSkill").VaultSkill[]>;
+  vaultSkillsSave?: (skill: import("./vaultSkill").VaultSkillInput) => Promise<import("./vaultSkill").VaultSkill>;
+  vaultSkillsDelete?: (id: string) => Promise<void>;
+  windowMinimize?: () => Promise<void>;
+  windowToggleMaximize?: () => Promise<boolean>;
+  windowClose?: () => Promise<void>;
+  windowIsMaximized?: () => Promise<boolean>;
+  subscribeWindowMaximized?: (listener: (maximized: boolean) => void) => () => void;
   /** Subscribe to incremental assistant text during `markdownChatSend` / `workspaceChatSend` when `streamId` is sent. */
   subscribeAiChatStream?: (listener: (payload: AiChatStreamPayload) => void) => () => void;
   aiListLocalOptions?: () => Promise<LocalAiOptions>;
+  /** Cancel an in-flight local AI chat turn (kills agent/model subprocess for the session key). */
+  aiChatCancel?: (sessionKey: string) => Promise<boolean>;
+  /** Preload local Whisper model (first voice use may download ~40MB). */
+  speechEnsureModel?: () => Promise<{ ok: true }>;
+  /** Transcribe a PCM audio chunk captured in the renderer (Electron offline STT). */
+  speechTranscribeChunk?: (req: {
+    samples: ArrayBuffer;
+    sampleRate: number;
+    locale: "en" | "pt";
+  }) => Promise<{ text: string }>;
 };
 
 declare global {

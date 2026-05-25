@@ -11,3 +11,6 @@ extraResources:
     to: tectonic
     filter:
       - "**/*"
+mac:
+  extendInfo:
+    NSMicrophoneUsageDescription: "RAG Talks uses the microphone for voice input in chat."

@@ -118,7 +118,9 @@ export function registerArchitectureIpc(): void {
     }
     void (async () => {
       try {
-        const folder = await getChatFolderPath(chatId);
+        const { getVaultRootPathForDocument } = await import("../../architectureFileIo.ts");
+        const vaultRoot = await getVaultRootPathForDocument(chatId);
+        const folder = vaultRoot ?? (await getChatFolderPath(chatId));
         await shell.openPath(folder);
       } catch (e) {
         console.error(e);

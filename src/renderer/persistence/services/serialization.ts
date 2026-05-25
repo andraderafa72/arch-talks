@@ -10,6 +10,7 @@ export function conversationsRecordToRows(
     title: conversation.title,
     kind: conversation.kind,
     templateId: conversation.templateId,
+    createdAt: conversation.createdAt,
     fileCount: Object.keys(conversation.files).length,
     updatedAt,
     files: conversation.files,
@@ -18,9 +19,16 @@ export function conversationsRecordToRows(
     history: conversation.history,
     chatMessages: conversation.chatMessages,
     chatTabs: conversation.chatTabs,
+    openChatTabIds: conversation.openChatTabIds,
     activeChatTabId: conversation.activeChatTabId,
     savedSnapshot: conversation.savedSnapshot,
     openEditorTabs: conversation.openEditorTabs,
+    referenceFolderPath: conversation.referenceFolderPath,
+    referenceExcerpt: conversation.referenceExcerpt,
+    pendingVaultProposal: conversation.pendingVaultProposal ?? null,
+    vaultName: conversation.vaultName,
+    vaultRootPath: conversation.vaultRootPath,
+    vaultCategory: conversation.vaultCategory,
   }));
 }
 

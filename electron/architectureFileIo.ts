@@ -1,4 +1,5 @@
 import { app } from "electron";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -25,6 +26,7 @@ export type DocumentMeta = {
   title: string;
   kind: string;
   templateId?: string | null;
+  createdAt?: string;
   updatedAt?: string;
   activeFile?: string;
   pendingPatch?: unknown;
@@ -32,7 +34,14 @@ export type DocumentMeta = {
   openEditorTabs?: string[];
   activeChatTabId?: string;
   chatTabs?: ChatIndexItem[];
+  openChatTabIds?: string[];
   fileCount?: number;
+  referenceFolderPath?: string;
+  referenceExcerpt?: string;
+  pendingVaultProposal?: unknown;
+  vaultName?: string;
+  vaultRootPath?: string;
+  vaultCategory?: string;
 };
 
 export type ChatDetail = {
@@ -66,20 +75,45 @@ function resolveUnder(filesRoot: string, relativePosix: string): string {
   return resolved;
 }
 
+/** Serializes writes per target path to avoid tmp-file races from concurrent saves. */
+const writeChains = new Map<string, Promise<void>>();
+
+function enqueueSerializedWrite(targetPath: string, task: () => Promise<void>): Promise<void> {
+  const previous = writeChains.get(targetPath) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(task);
+  writeChains.set(targetPath, run);
+  return run.finally(() => {
+    if (writeChains.get(targetPath) === run) writeChains.delete(targetPath);
+  });
+}
+
 async function atomicWriteUtf8(targetPath: string, contents: string): Promise<void> {
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  const tmp = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, contents, "utf8");
-  try {
-    await fs.rename(tmp, targetPath);
-  } catch {
+  await enqueueSerializedWrite(targetPath, async () => {
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    const tmp = `${targetPath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+    await fs.writeFile(tmp, contents, "utf8");
     try {
-      await fs.unlink(targetPath);
-    } catch {
-      /* ignore */
+      await fs.rename(tmp, targetPath);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        const stat = await fs.stat(tmp).catch(() => null);
+        if (!stat) {
+          throw new Error(
+            `Atomic write lost temp file before rename (concurrent save?): ${path.basename(targetPath)}`,
+            { cause: err },
+          );
+        }
+      }
+      if (code === "EEXIST" || code === "EPERM") {
+        await fs.rm(targetPath, { force: true }).catch(() => undefined);
+        await fs.rename(tmp, targetPath);
+        return;
+      }
+      await fs.unlink(tmp).catch(() => undefined);
+      throw err;
     }
-    await fs.rename(tmp, targetPath);
-  }
+  });
 }
 
 function isLikelyBinaryAsset(relPath: string): boolean {
@@ -250,6 +284,11 @@ export async function saveChat(documentId: string, chatId: string, detail: ChatD
 
 export async function readDocumentFiles(documentId: string): Promise<Record<string, string>> {
   if (!isSafeId(documentId)) throw new Error("Invalid document id");
+  const meta = await readDocumentMeta(documentId);
+  if (meta?.kind === "vault" && meta.vaultRootPath?.trim()) {
+    const { readVaultRootFiles } = await import("./vault/vaultRootIo.ts");
+    return readVaultRootFiles(path.resolve(meta.vaultRootPath.trim()));
+  }
   const root = getDocumentFilesRoot(documentId);
   await fs.mkdir(root, { recursive: true });
   return loadFiles(root, "");
@@ -257,6 +296,12 @@ export async function readDocumentFiles(documentId: string): Promise<Record<stri
 
 export async function writeDocumentFiles(documentId: string, files: Record<string, string>): Promise<void> {
   if (!isSafeId(documentId)) throw new Error("Invalid document id");
+  const meta = await readDocumentMeta(documentId);
+  if (meta?.kind === "vault" && meta.vaultRootPath?.trim()) {
+    const { writeVaultRootFiles } = await import("./vault/vaultRootIo.ts");
+    await writeVaultRootFiles(path.resolve(meta.vaultRootPath.trim()), files);
+    return;
+  }
   const filesRoot = getDocumentFilesRoot(documentId);
   await fs.mkdir(filesRoot, { recursive: true });
   const desired = new Set(Object.keys(files).map((k) => normalizeRelativePath(k)));
@@ -271,6 +316,11 @@ export async function writeDocumentFiles(documentId: string, files: Record<strin
       await fs.writeFile(target, content, "utf8");
     }
   }
+}
+
+export async function getVaultRootPathForDocument(documentId: string): Promise<string | undefined> {
+  const meta = await readDocumentMeta(documentId);
+  return meta?.vaultRootPath?.trim() || undefined;
 }
 
 export async function readArchitectureConversationsUnified(): Promise<JsonDocument<unknown>> {
@@ -288,17 +338,25 @@ export async function readArchitectureConversationsUnified(): Promise<JsonDocume
       title: meta.title,
       kind: meta.kind,
       templateId: meta.templateId ?? null,
+      createdAt: meta.createdAt,
       updatedAt: meta.updatedAt,
       fileCount: Object.keys(files).length,
       files,
-      activeFile: meta.activeFile ?? "main.tex",
+      activeFile: meta.activeFile ?? (meta.kind === "vault" ? "vault-overview.md" : "main.tex"),
       pendingPatch: meta.pendingPatch ?? null,
       savedSnapshot: meta.savedSnapshot ?? {},
       openEditorTabs: meta.openEditorTabs ?? [],
       chatTabs: (meta.chatTabs ?? []).map((tab) => ({ id: tab.id, title: tab.title })),
+      openChatTabIds: meta.openChatTabIds,
       activeChatTabId: meta.activeChatTabId ?? meta.chatTabs?.[0]?.id ?? "",
       chatMessages: [],
       history: [],
+      referenceFolderPath: meta.referenceFolderPath,
+      referenceExcerpt: meta.referenceExcerpt,
+      pendingVaultProposal: meta.pendingVaultProposal ?? null,
+      vaultName: meta.vaultName,
+      vaultRootPath: meta.vaultRootPath,
+      vaultCategory: meta.vaultCategory,
     });
   }
   return { items };
@@ -313,6 +371,7 @@ export async function writeAllChatsFromDocument(doc: JsonDocument<unknown>): Pro
       title: string;
       kind: string;
       templateId?: string | null;
+      createdAt?: string;
       updatedAt?: string;
       activeFile?: string;
       pendingPatch?: unknown;
@@ -320,9 +379,16 @@ export async function writeAllChatsFromDocument(doc: JsonDocument<unknown>): Pro
       openEditorTabs?: string[];
       files?: Record<string, string>;
       chatTabs?: ChatIndexItem[];
+      openChatTabIds?: string[];
       activeChatTabId?: string;
       chatMessages?: unknown[];
       history?: unknown[];
+      referenceFolderPath?: string;
+      referenceExcerpt?: string;
+      pendingVaultProposal?: unknown;
+      vaultName?: string;
+      vaultRootPath?: string;
+      vaultCategory?: string;
     };
     if (!row.id || !isSafeId(row.id)) continue;
     keepIds.add(row.id);
@@ -333,6 +399,7 @@ export async function writeAllChatsFromDocument(doc: JsonDocument<unknown>): Pro
       title: row.title,
       kind: row.kind,
       templateId: row.templateId ?? null,
+      createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       activeFile: row.activeFile,
       pendingPatch: row.pendingPatch ?? null,
@@ -340,7 +407,14 @@ export async function writeAllChatsFromDocument(doc: JsonDocument<unknown>): Pro
       openEditorTabs: row.openEditorTabs ?? [],
       fileCount: Object.keys(files).length,
       chatTabs: row.chatTabs ?? [{ id: "chat-1", title: "Chat 1" }],
+      openChatTabIds: row.openChatTabIds,
       activeChatTabId: row.activeChatTabId ?? row.chatTabs?.[0]?.id ?? "chat-1",
+      referenceFolderPath: row.referenceFolderPath,
+      referenceExcerpt: row.referenceExcerpt,
+      pendingVaultProposal: row.pendingVaultProposal ?? null,
+      vaultName: row.vaultName,
+      vaultRootPath: row.vaultRootPath,
+      vaultCategory: row.vaultCategory,
     });
     const activeChatId = row.activeChatTabId ?? row.chatTabs?.[0]?.id;
     if (activeChatId) {

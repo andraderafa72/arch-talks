@@ -1,29 +1,61 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { listConversations } from "@/api/conversations";
 import { listTemplates } from "@/api/templates";
 import { ConversationPersistenceService } from "@/persistence/services/conversationPersistenceService";
+import { userPreferencesService } from "@/persistence/services/userPreferencesService";
 import { useEditorStore } from "@/state/store";
 import type { Conversation, TechnicalTemplate } from "@/types";
+import type { UserPreferencesV1, WorkspaceLayoutPreferences } from "@/types/userPreferences";
+import { DEFAULT_WORKSPACE_LAYOUT } from "@/types/userPreferences";
 
 type UseArchitectureBootstrapArgs = {
   hydrateFromBackend: (payload: { conversations: Conversation[]; templates: TechnicalTemplate[] }) => void;
   clearError: () => void;
 };
 
-export function useArchitectureBootstrap({ hydrateFromBackend, clearError }: UseArchitectureBootstrapArgs) {
+type BootstrapState = {
+  ready: boolean;
+  initialLayout: WorkspaceLayoutPreferences;
+};
+
+export function useArchitectureBootstrap({ hydrateFromBackend, clearError }: UseArchitectureBootstrapArgs): BootstrapState {
+  const navigate = useNavigate();
   const persistEnabledRef = useRef(false);
   const conversationPersistence = useRef(new ConversationPersistenceService());
+  const restoredRouteRef = useRef(false);
+  const [ready, setReady] = useState(false);
+  const [initialLayout, setInitialLayout] = useState<WorkspaceLayoutPreferences>(DEFAULT_WORKSPACE_LAYOUT);
 
   useEffect(() => {
     persistEnabledRef.current = false;
+    restoredRouteRef.current = false;
+
     const bootstrap = async () => {
+      let preferences: UserPreferencesV1 = await userPreferencesService.load();
+      useEditorStore.getState().applyUserPreferences(preferences);
+      useEditorStore.setState({ activeConversationId: preferences.activeConversationId });
+      setInitialLayout(preferences.workspaceLayout);
+
       try {
         const [convs, tmpls] = await Promise.all([listConversations(), listTemplates()]);
         hydrateFromBackend({ conversations: convs, templates: tmpls });
-        const first = convs[0];
-        if (first?.activeChatTabId) {
-          void useEditorStore.getState().loadConversationTab(first.activeChatTabId);
+
+        const preferredConversationId = preferences.activeConversationId;
+        if (preferredConversationId && convs.some((conversation) => conversation.id === preferredConversationId)) {
+          useEditorStore.getState().setActiveConversation(preferredConversationId);
+        } else {
+          const first = convs[0];
+          if (first?.activeChatTabId) {
+            void useEditorStore.getState().loadConversationTab(first.activeChatTabId);
+          }
         }
+
+        if (!restoredRouteRef.current) {
+          restoredRouteRef.current = true;
+          navigate(preferences.lastRoute, { replace: true });
+        }
+
         clearError();
       } catch (error) {
         useEditorStore.setState({
@@ -31,13 +63,14 @@ export function useArchitectureBootstrap({ hydrateFromBackend, clearError }: Use
             error instanceof Error ? error.message : "Failed to load saved conversations and templates.",
         });
       } finally {
-        /** Persist after load: Electron (per-chat folders), browser + backend (HTTP PUT), or localStorage. */
+        userPreferencesService.enablePersist();
         persistEnabledRef.current = typeof window !== "undefined";
+        setReady(true);
       }
     };
 
     void bootstrap();
-  }, [hydrateFromBackend, clearError]);
+  }, [clearError, hydrateFromBackend, navigate]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -54,7 +87,7 @@ export function useArchitectureBootstrap({ hydrateFromBackend, clearError }: Use
         void conversationPersistence.current
           .persistArchitectureState(state.conversations, state.technicalTemplates)
           .catch((err) => {
-          console.error(err);
+            console.error(err);
           });
       }, 400);
     });
@@ -63,4 +96,6 @@ export function useArchitectureBootstrap({ hydrateFromBackend, clearError }: Use
       unsub();
     };
   }, []);
+
+  return { ready, initialLayout };
 }

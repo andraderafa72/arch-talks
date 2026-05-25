@@ -1,0 +1,38 @@
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { useWorkspaceLayoutContext } from "@/contexts/WorkspaceLayoutContext";
+import { userPreferencesService } from "@/persistence/services/userPreferencesService";
+import { useEditorStore } from "@/state/store";
+import { normalizeAppRoute } from "@/types/userPreferences";
+
+export function useUserPreferencesSync(): void {
+  const location = useLocation();
+  const { leftWidth, rightWidth, bottomHeight, filesSidebarWidth } = useWorkspaceLayoutContext();
+
+  useEffect(() => {
+    if (!userPreferencesService.isHydrated()) return;
+    userPreferencesService.patch({ lastRoute: normalizeAppRoute(location.pathname) });
+  }, [location.pathname]);
+
+  useEffect(() => {
+    return useEditorStore.subscribe((state, prev) => {
+      if (!userPreferencesService.isHydrated()) return;
+      const patch: Partial<ReturnType<typeof userPreferencesService.getCached>> = {};
+      if (state.theme !== prev.theme) patch.theme = state.theme;
+      if (state.locale !== prev.locale) patch.locale = state.locale;
+      if (state.activeConversationId !== prev.activeConversationId) {
+        patch.activeConversationId = state.activeConversationId;
+      }
+      if (Object.keys(patch).length > 0) {
+        userPreferencesService.patch(patch);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!userPreferencesService.isHydrated()) return;
+    userPreferencesService.patch({
+      workspaceLayout: { leftWidth, rightWidth, bottomHeight, filesSidebarWidth },
+    });
+  }, [filesSidebarWidth, leftWidth, rightWidth, bottomHeight]);
+}

@@ -21,6 +21,7 @@ export function MarkdownToPdfChatPopover() {
     toggleChatOpen,
     closeChat,
     sendChatMessage,
+    stopChatMessage,
     clearActiveFileChat,
     isSending,
     streamingAssistantText,
@@ -139,6 +140,7 @@ export function MarkdownToPdfChatPopover() {
                 placeholder="Descreva a alteracao desejada..."
                 disabled={!activeFile || isSending}
                 onSubmit={sendChatMessage}
+                onStop={stopChatMessage}
               />
             </div>
           </div>

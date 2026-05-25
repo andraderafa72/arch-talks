@@ -1,29 +1,81 @@
 import type { WebContents } from "electron";
-import { LocalAIProviderRuntime } from "@orchestra-ai-runtime";
-import type { ModelInfo, ProcessSession } from "@orchestra-ai-runtime";
+import {
+  LocalAIProviderRuntime,
+  createConsoleLogger,
+  createFileLogger,
+} from "@orchestra-ai-runtime";
+import type {
+  AiLogContentMode,
+  AiLogEntry,
+  ModelInfo,
+  ProcessSession,
+  RuntimeLogger,
+} from "@orchestra-ai-runtime";
 import type { LocalAiOptions, LocalAiSelection } from "../../src/renderer/types/electron-api.ts";
 
 let aiRuntime: LocalAIProviderRuntime | null = null;
 let aiRuntimeInitializing: Promise<LocalAIProviderRuntime> | null = null;
 let aiRuntimeShutdownStarted = false;
+let aiLogFileHandle: ReturnType<typeof createFileLogger> | null = null;
+
+function resolveAiLogContentMode(): AiLogContentMode {
+  const raw = process.env.ORCHESTRA_AI_LOG_CONTENT?.trim().toLowerCase();
+  return raw === "full" ? "full" : "metadata";
+}
+
+function createAiRuntimeLogger(contentMode: AiLogContentMode): RuntimeLogger {
+  aiLogFileHandle = createFileLogger();
+  const stderrLogger = createConsoleLogger({ compact: true });
+
+  return {
+    log(entry: AiLogEntry): void {
+      aiLogFileHandle?.logger.log(entry);
+      if (entry.level === "error" || entry.level === "warn") {
+        stderrLogger.log(entry);
+      }
+    },
+  };
+}
 
 type LocalAiChatSessionEntry = {
   session: ProcessSession;
   provider: string;
   modelId: string;
   pending: Promise<unknown>;
+  /** Detaches listeners from the previous in-flight turn on this session. */
+  detachTurnListeners?: () => void;
+  /** Cancels the current in-flight turn (kills agent/model subprocess). */
+  cancelTurn?: () => void;
 };
 
+function createAbortError(): Error {
+  const error = new Error("Cancelled");
+  error.name = "AbortError";
+  return error;
+}
+
+export function isLocalAiAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 const localAiChatSessions = new Map<string, LocalAiChatSessionEntry>();
+
+export function localAiSessionHasUserHistory(sessionKey: string): boolean {
+  const entry = localAiChatSessions.get(sessionKey.trim());
+  if (!entry) return false;
+  return entry.session.messages.some((message) => message.role === "user");
+}
 
 async function getAiRuntime(): Promise<LocalAIProviderRuntime> {
   if (aiRuntime) return aiRuntime;
   if (aiRuntimeInitializing) return aiRuntimeInitializing;
 
   aiRuntimeInitializing = (async () => {
-    const runtime = new LocalAIProviderRuntime();
-    runtime.on("error", ({ error }) => {
-      console.error("[orchestra-ai-runtime]", error.message, error.stack ?? "");
+    const contentMode = resolveAiLogContentMode();
+    const runtime = new LocalAIProviderRuntime(undefined, {
+      logger: createAiRuntimeLogger(contentMode),
+      contentMode,
+      level: "info",
     });
     await runtime.initialize();
     aiRuntime = runtime;
@@ -38,8 +90,13 @@ export async function shutdownAiRuntime(): Promise<void> {
   localAiChatSessions.clear();
   aiRuntime = null;
   aiRuntimeInitializing = null;
-  if (!runtime) return;
-  await runtime.shutdown();
+  if (runtime) {
+    await runtime.shutdown();
+  }
+  if (aiLogFileHandle) {
+    await aiLogFileHandle.close();
+    aiLogFileHandle = null;
+  }
 }
 
 /** Returns false if shutdown was already started (second before-quit). */
@@ -128,32 +185,91 @@ async function getLocalAiChatSession(
   return entry;
 }
 
+export type LocalAiReplyTimeout = {
+  /** Fail after this many ms without a new token (default 60s). Resets on every token. */
+  idleMs?: number;
+  /** Fail if no token/output arrives within this many ms from send (default 120s). */
+  firstOutputMs?: number;
+};
+
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
+const DEFAULT_FIRST_OUTPUT_TIMEOUT_MS = 120_000;
+const VAULT_IDLE_TIMEOUT_MS = 90_000;
+const VAULT_FIRST_OUTPUT_TIMEOUT_MS = 300_000;
+
 async function collectLocalAiReply(
   session: ProcessSession,
+  entry: LocalAiChatSessionEntry,
   prompt: string,
-  options?: { onStreamText?: (accumulated: string) => void },
+  options?: {
+    onStreamText?: (accumulated: string) => void;
+    replyTimeout?: LocalAiReplyTimeout;
+  },
 ): Promise<string> {
+  entry.detachTurnListeners?.();
+
+  const idleMs = options?.replyTimeout?.idleMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+  const firstOutputMs = options?.replyTimeout?.firstOutputMs ?? DEFAULT_FIRST_OUTPUT_TIMEOUT_MS;
+
   return new Promise((resolve, reject) => {
     let tokenReply = "";
     let settled = false;
+    let activityTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const timeout = setTimeout(() => {
-      settleError(new Error("AI response timeout (60s)"));
-    }, 60_000);
+    const clearActivityTimer = () => {
+      if (activityTimer !== undefined) {
+        clearTimeout(activityTimer);
+        activityTimer = undefined;
+      }
+    };
+
+    const armFirstOutputTimeout = () => {
+      clearActivityTimer();
+      activityTimer = setTimeout(() => {
+        settleError(
+          new Error(`AI response timeout (no output within ${Math.round(firstOutputMs / 1000)}s)`),
+        );
+      }, firstOutputMs);
+    };
+
+    const armIdleTimeout = () => {
+      clearActivityTimer();
+      activityTimer = setTimeout(() => {
+        settleError(
+          new Error(`AI response timeout (no new output for ${Math.round(idleMs / 1000)}s)`),
+        );
+      }, idleMs);
+    };
+
+    const noteOutputActivity = () => {
+      armIdleTimeout();
+    };
 
     const cleanup = () => {
-      clearTimeout(timeout);
+      clearActivityTimer();
       session.off("token", onToken);
       session.off("message", onMessage);
       session.off("error", onError);
       session.off("closed", onClosed);
       session.off("exit", onExit);
+      if (entry.detachTurnListeners === cleanup) {
+        entry.detachTurnListeners = undefined;
+      }
+    };
+
+    entry.detachTurnListeners = cleanup;
+
+    const clearCancelTurn = () => {
+      if (entry.cancelTurn === cancelTurn) {
+        entry.cancelTurn = undefined;
+      }
     };
 
     const settle = (value: string) => {
       if (settled) return;
       settled = true;
       cleanup();
+      clearCancelTurn();
       resolve(value);
     };
 
@@ -161,36 +277,63 @@ async function collectLocalAiReply(
       if (settled) return;
       settled = true;
       cleanup();
+      clearCancelTurn();
       reject(error);
     };
 
+    const cancelTurn = () => {
+      if (settled) return;
+      settleError(createAbortError());
+      void entry.session.abortTurn().catch(() => undefined);
+    };
+
+    entry.cancelTurn = cancelTurn;
+
     const onToken = ({ token }: { token: string }) => {
-      tokenReply += token;
-      options?.onStreamText?.(tokenReply);
+      if (token) {
+        tokenReply += token;
+        options?.onStreamText?.(tokenReply);
+      }
+      noteOutputActivity();
     };
 
     const onMessage = ({ message }: { message: { content: string } }) => {
+      if (settled) return;
       settle(message.content || tokenReply.trim());
     };
 
     const onError = ({ error }: { error: Error }) => {
+      if (settled) return;
       settleError(error);
     };
 
     const onClosed = () => {
-      settle(tokenReply.trim() || [...session.messages].reverse().find((m) => m.role === "assistant")?.content || "");
+      if (settled) return;
+      settle(
+        tokenReply.trim() ||
+          [...session.messages].reverse().find((m) => m.role === "assistant")?.content ||
+          "",
+      );
     };
 
     const onExit = () => {
-      settle(tokenReply.trim() || [...session.messages].reverse().find((m) => m.role === "assistant")?.content || "");
+      if (settled) return;
+      settle(
+        tokenReply.trim() ||
+          [...session.messages].reverse().find((m) => m.role === "assistant")?.content ||
+          "",
+      );
     };
 
+    // Use .on (not .once) so cleanup can always session.off(); .once wrappers are not
+    // removed by .off and stack across reused chat sessions, causing duplicate replies.
     session.on("token", onToken);
-    session.once("message", onMessage);
-    session.once("error", onError);
-    session.once("closed", onClosed);
-    session.once("exit", onExit);
+    session.on("message", onMessage);
+    session.on("error", onError);
+    session.on("closed", onClosed);
+    session.on("exit", onExit);
 
+    armFirstOutputTimeout();
     void session.send(prompt);
   });
 }
@@ -201,12 +344,14 @@ export async function runLocalAiChat({
   prompt,
   selection,
   stream,
+  replyTimeout,
 }: {
   sessionKey: string;
   systemPrompt: string;
   prompt: string;
   selection: LocalAiSelection | undefined;
   stream?: { sender: WebContents; streamId: string };
+  replyTimeout?: LocalAiReplyTimeout;
 }): Promise<string> {
   const runtime = await getAiRuntime();
 
@@ -234,8 +379,20 @@ export async function runLocalAiChat({
 
   const entry = await getLocalAiChatSession(runtime, sessionKey, model, systemPrompt);
   const reply = entry.pending
-    .catch((e) => console.error(e))
-    .then(() => collectLocalAiReply(entry.session, prompt, { onStreamText }));
+    .then(() => collectLocalAiReply(entry.session, entry, prompt, { onStreamText, replyTimeout }));
   entry.pending = reply.catch(() => undefined);
   return reply;
+}
+
+export const vaultChatReplyTimeout: LocalAiReplyTimeout = {
+  idleMs: VAULT_IDLE_TIMEOUT_MS,
+  firstOutputMs: VAULT_FIRST_OUTPUT_TIMEOUT_MS,
+};
+
+/** Cancel an in-flight chat turn for the given session key (kills the agent/model subprocess). */
+export async function cancelLocalAiChat(sessionKey: string): Promise<boolean> {
+  const entry = localAiChatSessions.get(sessionKey.trim());
+  if (!entry?.cancelTurn) return false;
+  entry.cancelTurn();
+  return true;
 }

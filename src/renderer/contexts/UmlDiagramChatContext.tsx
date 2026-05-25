@@ -29,6 +29,7 @@ type UmlDiagramChatContextValue = {
   activeFileChat: UmlDiagramChatMessage[];
   isSending: boolean;
   streamingAssistantText: string | null;
+  streamingStreamId: string | null;
   chatError: string | null;
   activeAiSelection: LocalAiSelection | undefined;
   setActiveAiSelection: (selection: LocalAiSelection | undefined) => void;
@@ -77,6 +78,7 @@ export function UmlDiagramChatProvider({
   const [chatByFile, setChatByFile] = useState<Record<string, UmlDiagramChatMessage[]>>({});
   const [isSending, setIsSending] = useState(false);
   const [streamingAssistantText, setStreamingAssistantText] = useState<string | null>(null);
+  const [streamingStreamId, setStreamingStreamId] = useState<string | null>(null);
   const streamingTextRef = useRef("");
   const [chatError, setChatError] = useState<string | null>(null);
   const [activeAiSelection, setActiveAiSelection] = useState<LocalAiSelection | undefined>(undefined);
@@ -148,6 +150,7 @@ export function UmlDiagramChatProvider({
     const sessionKey = `uml-render:${snapshotFile}`;
     const streamId = crypto.randomUUID();
     activeStreamIdRef.current = streamId;
+    setStreamingStreamId(streamId);
     streamingTextRef.current = "";
     setStreamingAssistantText("");
 
@@ -161,6 +164,7 @@ export function UmlDiagramChatProvider({
         streamId,
       });
       activeStreamIdRef.current = null;
+      setStreamingStreamId(null);
       streamingTextRef.current = "";
       setStreamingAssistantText(null);
       const assistantMessage: UmlDiagramChatMessage = {
@@ -196,6 +200,7 @@ export function UmlDiagramChatProvider({
       }
     } catch (err: unknown) {
       activeStreamIdRef.current = null;
+      setStreamingStreamId(null);
       const partial = streamingTextRef.current;
       streamingTextRef.current = "";
       setStreamingAssistantText(null);
@@ -249,6 +254,7 @@ export function UmlDiagramChatProvider({
     });
     setChatError(null);
     activeStreamIdRef.current = null;
+    setStreamingStreamId(null);
     setStreamingAssistantText(null);
   }, [activeFile]);
 
@@ -269,6 +275,7 @@ export function UmlDiagramChatProvider({
       activeFileChat,
       isSending,
       streamingAssistantText,
+      streamingStreamId,
       chatError,
       activeAiSelection,
       setActiveAiSelection,
@@ -286,6 +293,7 @@ export function UmlDiagramChatProvider({
       activeFileChat,
       isSending,
       streamingAssistantText,
+      streamingStreamId,
       chatError,
       activeAiSelection,
       toggleChatOpen,

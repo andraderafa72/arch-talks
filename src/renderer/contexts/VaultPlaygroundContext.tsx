@@ -36,6 +36,7 @@ type VaultPlaygroundContextValue = {
   setActiveAiSelection: (selection: LocalAiSelection | undefined) => void;
   isSending: boolean;
   streamingAssistantText: string | null;
+  streamingStreamId: string | null;
   sendMessage: (prompt: string) => Promise<void>;
   stopMessage: () => Promise<void>;
   clearMessages: () => void;
@@ -87,6 +88,7 @@ export function VaultPlaygroundProvider({
   const [activeAiSelection, setActiveAiSelection] = useState<LocalAiSelection | undefined>(undefined);
   const [isSending, setIsSending] = useState(false);
   const [streamingAssistantText, setStreamingAssistantText] = useState<string | null>(null);
+  const [streamingStreamId, setStreamingStreamId] = useState<string | null>(null);
   const streamingTextRef = useRef("");
   const activeStreamIdRef = useRef<string | null>(null);
   const skillStorageKey = `vault-playground-skill:${documentId}`;
@@ -192,6 +194,7 @@ export function VaultPlaygroundProvider({
 
       const streamId = crypto.randomUUID();
       activeStreamIdRef.current = streamId;
+      setStreamingStreamId(streamId);
       streamingTextRef.current = "";
       setStreamingAssistantText("");
 
@@ -208,6 +211,7 @@ export function VaultPlaygroundProvider({
           vaultName,
         });
         activeStreamIdRef.current = null;
+        setStreamingStreamId(null);
         streamingTextRef.current = "";
         setStreamingAssistantText(null);
         const assistantMessage: VaultPlaygroundMessage = {
@@ -219,6 +223,7 @@ export function VaultPlaygroundProvider({
         setMessages((current) => [...current, assistantMessage]);
       } catch (error: unknown) {
         activeStreamIdRef.current = null;
+        setStreamingStreamId(null);
         const partial = streamingTextRef.current;
         streamingTextRef.current = "";
         setStreamingAssistantText(null);
@@ -268,6 +273,7 @@ export function VaultPlaygroundProvider({
   const clearMessages = useCallback(() => {
     setMessages([]);
     activeStreamIdRef.current = null;
+    setStreamingStreamId(null);
     streamingTextRef.current = "";
     setStreamingAssistantText(null);
   }, []);
@@ -287,6 +293,7 @@ export function VaultPlaygroundProvider({
       setActiveAiSelection,
       isSending,
       streamingAssistantText,
+      streamingStreamId,
       sendMessage,
       stopMessage,
       clearMessages,
@@ -304,6 +311,7 @@ export function VaultPlaygroundProvider({
       activeAiSelection,
       isSending,
       streamingAssistantText,
+      streamingStreamId,
       sendMessage,
       stopMessage,
       clearMessages,

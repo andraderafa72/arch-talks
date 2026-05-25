@@ -30,6 +30,7 @@ type MarkdownToPdfChatContextValue = {
   isSending: boolean;
   /** Accumulated assistant text during the current request; `null` when idle. */
   streamingAssistantText: string | null;
+  streamingStreamId: string | null;
   chatError: string | null;
   activeAiSelection: LocalAiSelection | undefined;
   setActiveAiSelection: (selection: LocalAiSelection | undefined) => void;
@@ -78,6 +79,7 @@ export function MarkdownToPdfChatProvider({
   const [chatByFile, setChatByFile] = useState<Record<string, MarkdownToPdfChatMessage[]>>({});
   const [isSending, setIsSending] = useState(false);
   const [streamingAssistantText, setStreamingAssistantText] = useState<string | null>(null);
+  const [streamingStreamId, setStreamingStreamId] = useState<string | null>(null);
   const streamingTextRef = useRef("");
   const [chatError, setChatError] = useState<string | null>(null);
   const [activeAiSelection, setActiveAiSelection] = useState<LocalAiSelection | undefined>(undefined);
@@ -149,6 +151,7 @@ export function MarkdownToPdfChatProvider({
     const sessionKey = `markdown-to-pdf:${snapshotFile}`;
     const streamId = crypto.randomUUID();
     activeStreamIdRef.current = streamId;
+    setStreamingStreamId(streamId);
     streamingTextRef.current = "";
     setStreamingAssistantText("");
 
@@ -162,6 +165,7 @@ export function MarkdownToPdfChatProvider({
         streamId,
       });
       activeStreamIdRef.current = null;
+      setStreamingStreamId(null);
       streamingTextRef.current = "";
       setStreamingAssistantText(null);
       const assistantMessage: MarkdownToPdfChatMessage = {
@@ -197,6 +201,7 @@ export function MarkdownToPdfChatProvider({
       }
     } catch (err: unknown) {
       activeStreamIdRef.current = null;
+      setStreamingStreamId(null);
       const partial = streamingTextRef.current;
       streamingTextRef.current = "";
       setStreamingAssistantText(null);
@@ -250,6 +255,7 @@ export function MarkdownToPdfChatProvider({
     });
     setChatError(null);
     activeStreamIdRef.current = null;
+    setStreamingStreamId(null);
     setStreamingAssistantText(null);
   }, [activeFile]);
 
@@ -270,6 +276,7 @@ export function MarkdownToPdfChatProvider({
       activeFileChat,
       isSending,
       streamingAssistantText,
+      streamingStreamId,
       chatError,
       activeAiSelection,
       setActiveAiSelection,
@@ -287,6 +294,7 @@ export function MarkdownToPdfChatProvider({
       activeFileChat,
       isSending,
       streamingAssistantText,
+      streamingStreamId,
       chatError,
       activeAiSelection,
       toggleChatOpen,

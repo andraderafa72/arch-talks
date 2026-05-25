@@ -4,15 +4,21 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ChatAiControls } from "@/components/chat/ChatAiControls";
 import { ChatMessageMarkdown } from "@/components/chat/ChatMessageMarkdown";
+import { StreamingChatMessage } from "@/components/chat/StreamingChatMessage";
 import { getBackendBaseUrl } from "@/api/config";
 import { chatTabStreamKey } from "@/lib/chatTabStream";
 import { buildVaultPlanProposal } from "@/lib/vaultPlanProposal";
 import { isAbortError, stoppedAssistantContent, stoppedSystemContent } from "@/lib/localAiErrors";
 import {
+  chatAssistantBubbleClass,
+  chatStreamingBubbleClass,
+  chatSystemBubbleClass,
+  chatUserBubbleClass,
+} from "@/lib/chatThemeClasses";
+import {
   createSystemMessage,
   resolveSystemTone,
   systemMarkdownVariant,
-  systemMessageBubbleClass,
 } from "@/lib/chatSystemMessage";
 import { useEditorStore } from "@/state/store";
 import type { ChatConversationTab, ChatMessage, ChatSystemTone, Patch } from "@/types";
@@ -21,13 +27,9 @@ import type { LocalAiSelection } from "@/types/electron-api";
 const CHAT_MESSAGE_MAX_WIDTH_RATIO = 0.8;
 
 function messageBubbleToneClass(message: ChatMessage): string {
-  if (message.role === "user") {
-    return "bg-zinc-900 text-white dark:bg-zinc-700 dark:text-zinc-100";
-  }
-  if (message.role === "assistant") {
-    return "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100";
-  }
-  return systemMessageBubbleClass(resolveSystemTone(message));
+  if (message.role === "user") return chatUserBubbleClass();
+  if (message.role === "assistant") return chatAssistantBubbleClass();
+  return chatSystemBubbleClass(resolveSystemTone(message));
 }
 
 function messageBubbleStyleForRole(
@@ -48,14 +50,14 @@ const chatMessageBubbleClass =
 function ChatThinkingIndicator({ locale }: { locale: string }) {
   return (
     <div
-      className="flex items-center gap-2 py-0.5 text-sm text-zinc-500 dark:text-zinc-400"
+      className="flex items-center gap-2 py-0.5 text-sm text-[var(--ui-chat-thinking-fg)]"
       role="status"
       aria-live="polite"
       aria-label={locale === "pt" ? "Pensando" : "Thinking"}
     >
       <span className="relative flex h-2 w-2 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-zinc-400 opacity-60 dark:bg-zinc-500" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-zinc-500 dark:bg-zinc-400" />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--ui-chat-thinking-indicator)] opacity-60" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--ui-chat-thinking-indicator)]" />
       </span>
       <span className="italic">
         {locale === "pt" ? "Pensando" : "Thinking"}
@@ -506,8 +508,8 @@ export function ChatPanel({
   );
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col border-r border-zinc-200 bg-[#fefefe] dark:border-zinc-700 dark:bg-zinc-950">
-      <div className="flex items-center gap-1 border-b border-zinc-200 bg-[#f8f8f8] px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900">
+    <div className="flex h-full min-h-0 min-w-0 flex-col border-r border-[var(--ui-panel-border)] bg-[var(--ui-panel-bg)]">
+      <div className="flex items-center gap-1 border-b border-[var(--ui-panel-border)] bg-[var(--ui-header-bg)] px-2 py-1">
         <div className="relative shrink-0" data-chat-tabs-menu-wrap="true">
           <Button
             type="button"
@@ -521,7 +523,7 @@ export function ChatPanel({
             <List className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
           {tabsMenuOpen ? (
-            <div className="absolute left-0 top-full z-20 mt-1 max-h-56 min-w-[14rem] overflow-auto rounded-md border border-zinc-200 bg-[#fefefe] py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+            <div className="absolute left-0 top-full z-20 mt-1 max-h-56 min-w-[14rem] overflow-auto rounded-md border border-[var(--ui-panel-border)] bg-[var(--ui-panel-bg)] py-1 shadow-lg">
               {allConversationTabs.map((tab) => {
                 const isOpen = conversationTabs.some((openTab) => openTab.id === tab.id);
                 return (
@@ -530,10 +532,10 @@ export function ChatPanel({
                   type="button"
                   className={`flex w-full items-center px-2 py-1 text-left text-xs ${
                     tab.id === activeConversationTabId
-                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                      ? "bg-[var(--ui-chat-tabs-menu-active-bg)] text-[var(--ui-chat-tabs-menu-active-fg)]"
                       : isOpen
-                        ? "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                        : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        ? "text-[var(--ui-chat-tabs-menu-inactive-fg)] hover:bg-[var(--ui-chat-tabs-menu-hover-bg)]"
+                        : "text-[var(--ui-chat-tabs-menu-inactive-fg)] hover:bg-[var(--ui-chat-tabs-menu-hover-bg)]"
                   }`}
                   onClick={() => {
                     onSetActiveConversationTab(tab.id);
@@ -556,8 +558,8 @@ export function ChatPanel({
                 key={tab.id}
                 className={`group flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs ${
                   isActive
-                    ? "border-zinc-300 bg-[#fefefe] text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                    : "border-transparent bg-transparent text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    ? "border-[var(--ui-border)] bg-[var(--ui-panel-bg)] text-[var(--ui-shell-fg)]"
+                    : "border-transparent bg-transparent text-[var(--ui-chat-tab-inactive-fg)] hover:bg-[var(--ui-chat-tab-hover-bg)]"
                 }`}
               >
                 {isEditing ? (
@@ -574,7 +576,7 @@ export function ChatPanel({
                         setEditingTitle("");
                       }
                     }}
-                    className="h-5 w-28 rounded border border-zinc-300 bg-white px-1 text-xs leading-none outline-none dark:border-zinc-600 dark:bg-zinc-900"
+                    className="h-5 w-28 rounded border border-[var(--ui-chat-tab-rename-input-border)] bg-[var(--ui-chat-tab-rename-input-bg)] px-1 text-xs leading-none text-[var(--ui-shell-fg)] outline-none"
                     autoFocus
                   />
                 ) : (
@@ -590,7 +592,7 @@ export function ChatPanel({
                 {!isEditing ? (
                   <button
                     type="button"
-                    className="invisible rounded p-0.5 hover:bg-zinc-200 group-hover:visible dark:hover:bg-zinc-700"
+                    className="invisible rounded p-0.5 hover:bg-[var(--ui-chat-tab-icon-hover-bg)] group-hover:visible"
                     onClick={() => {
                       if (activeConversationTabId !== tab.id) {
                         onSetActiveConversationTab(tab.id);
@@ -605,7 +607,7 @@ export function ChatPanel({
                 {isEditing ? (
                   <button
                     type="button"
-                    className="rounded p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    className="rounded p-0.5 hover:bg-[var(--ui-chat-tab-icon-hover-bg)]"
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={commitRename}
                     aria-label={`Save ${tab.title} name`}
@@ -615,7 +617,7 @@ export function ChatPanel({
                 ) : null}
                 <button
                   type="button"
-                  className="invisible rounded p-0.5 hover:bg-zinc-200 group-hover:visible dark:hover:bg-zinc-700"
+                  className="invisible rounded p-0.5 hover:bg-[var(--ui-chat-tab-icon-hover-bg)] group-hover:visible"
                   onClick={() => onCloseConversationTab(tab.id)}
                   aria-label={`Close ${tab.title}`}
                 >
@@ -672,14 +674,17 @@ export function ChatPanel({
           {workspaceStream && workspaceStream.text.length > 0 ? (
             <div className="flex min-w-0 w-full justify-start">
               <div
-                className={`${chatMessageBubbleClass} bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100`}
+                className={`${chatMessageBubbleClass} ${chatStreamingBubbleClass()}`}
                 style={messageBubbleStyleForRole("assistant", messageMaxWidthPx)}
                 aria-live="polite"
               >
-                <ChatMessageMarkdown
+                <StreamingChatMessage
                   content={workspaceStream.text}
                   variant="assistant"
                   className={chatMarkdownClass}
+                  streamId={workspaceStream.streamId}
+                  isStreaming
+                  scrollAnchorRef={workspaceStreamEndRef}
                 />
               </div>
             </div>
@@ -692,7 +697,7 @@ export function ChatPanel({
           <ChatThinkingIndicator locale={locale} />
         </div>
       ) : null}
-      <div className="border-t border-zinc-200 bg-[#fefefe] px-5 py-3 dark:border-zinc-700 dark:bg-zinc-950">
+      <div className="border-t border-[var(--ui-panel-border)] bg-[var(--ui-panel-bg)] px-5 py-3">
         <ChatAiControls
           selection={aiSelection}
           onSelectionChange={onAiSelectionChange}

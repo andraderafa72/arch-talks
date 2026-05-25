@@ -2,6 +2,7 @@ import { Shapes, Trash2, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ChatAiControls } from "@/components/chat/ChatAiControls";
 import { ChatMessageMarkdown } from "@/components/chat/ChatMessageMarkdown";
+import { StreamingChatMessage } from "@/components/chat/StreamingChatMessage";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUmlDiagramChatContext } from "@/contexts/UmlDiagramChatContext";
@@ -25,6 +26,7 @@ export function UmlDiagramChatPopover() {
     clearActiveFileChat,
     isSending,
     streamingAssistantText,
+    streamingStreamId,
   } = useUmlDiagramChatContext();
 
   const streamEndRef = useRef<HTMLDivElement | null>(null);
@@ -115,8 +117,14 @@ export function UmlDiagramChatPopover() {
                   aria-busy={isSending}
                   aria-live="polite"
                 >
-                  {streamingAssistantText.length > 0 ? (
-                    <ChatMessageMarkdown content={streamingAssistantText} variant="assistant" />
+                  {streamingAssistantText.length > 0 && streamingStreamId ? (
+                    <StreamingChatMessage
+                      content={streamingAssistantText}
+                      variant="assistant"
+                      streamId={streamingStreamId}
+                      isStreaming={isSending}
+                      scrollAnchorRef={streamEndRef}
+                    />
                   ) : (
                     <div className="space-y-2 py-1">
                       <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">

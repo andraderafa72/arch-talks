@@ -178,9 +178,9 @@ function UmlRenderToolContent({ theme }: UmlRenderToolProps) {
           }
           right={
             <>
-              <div className="flex shrink-0 flex-col gap-1 border-b border-zinc-200 px-3 py-2 dark:border-zinc-700">
+              <div className="flex shrink-0 flex-col gap-1 border-b border-[var(--ui-uml-preview-border)] px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold">Preview</span>
+                  <span className="text-sm font-semibold text-[var(--ui-uml-preview-header-fg)]">Preview</span>
                   <Button type="button" size="sm" disabled={!lastBlob} onClick={downloadPng}>
                     Download PNG
                   </Button>
@@ -192,9 +192,13 @@ function UmlRenderToolContent({ theme }: UmlRenderToolProps) {
                 ) : null}
               </div>
               <div className="flex min-h-0 flex-1 flex-col p-3">
-                {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+                {error ? (
+                  <p className="text-sm text-[var(--ui-uml-preview-error-fg)]" role="alert">
+                    {error}
+                  </p>
+                ) : null}
                 {!error && source.trim() && loading ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Rendering…</p>
+                  <p className="text-sm text-[var(--ui-uml-preview-muted-fg)]">Rendering…</p>
                 ) : null}
                 {!error && previewUrl ? (
                   <UmlDiagramPreview
@@ -205,7 +209,7 @@ function UmlRenderToolContent({ theme }: UmlRenderToolProps) {
                   />
                 ) : null}
                 {!source.trim() && !error ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Enter PlantUML above.</p>
+                  <p className="text-sm text-[var(--ui-uml-preview-muted-fg)]">Enter PlantUML above.</p>
                 ) : null}
               </div>
             </>

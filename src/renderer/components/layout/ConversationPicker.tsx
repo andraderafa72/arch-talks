@@ -55,8 +55,10 @@ export function ConversationPicker({
       <button
         type="button"
         className={cn(
-          "inline-flex h-9 min-w-0 max-w-[10rem] items-center gap-2 rounded-md border border-zinc-200 bg-[#fefefe] px-2.5 text-sm sm:max-w-[14rem] dark:border-zinc-700 dark:bg-zinc-900",
-          conversations.length === 0 && "text-zinc-500 dark:text-zinc-400",
+          "inline-flex h-9 min-w-0 max-w-[10rem] items-center gap-2 rounded-md border border-[var(--ui-header-btn-border)] bg-[var(--ui-header-btn-bg)] px-2.5 text-sm text-[var(--ui-header-btn-fg)] transition-colors hover:bg-[var(--ui-header-btn-hover-bg)] sm:max-w-[14rem]",
+          open &&
+            "border-[var(--ui-header-btn-active-border)] bg-[var(--ui-header-btn-active-bg)] text-[var(--ui-header-btn-active-fg)]",
+          conversations.length === 0 && "text-[var(--ui-popover-muted-fg)]",
         )}
         aria-expanded={open}
         aria-haspopup="listbox"
@@ -70,7 +72,7 @@ export function ConversationPicker({
         {triggerKind ? (
           <ConversationKindIcon
             kind={triggerKind}
-            className="h-3.5 w-3.5 shrink-0 text-zinc-500 dark:text-zinc-400"
+            className="h-3.5 w-3.5 shrink-0 text-[var(--ui-popover-muted-fg)]"
           />
         ) : null}
         <span className="min-w-0 truncate">{triggerLabel}</span>
@@ -82,7 +84,7 @@ export function ConversationPicker({
 
       {open ? (
         <div
-          className="absolute left-0 top-full z-[200] mt-1 w-[min(22rem,calc(100vw-1.5rem))] rounded-md border border-zinc-200 bg-[#fefefe] shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+          className="absolute left-0 top-full z-[200] mt-1 w-[min(22rem,calc(100vw-1.5rem))] rounded-md border border-[var(--ui-popover-border)] bg-[var(--ui-popover-bg)] text-[var(--ui-popover-fg)] shadow-lg"
           role="listbox"
           aria-label={t.projectPickerLabel}
         >

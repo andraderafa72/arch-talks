@@ -5,54 +5,9 @@ import { usePlantUmlPreview } from "@/hooks/usePlantUmlPreview";
 
 export type MarkdownToPdfTheme = "light" | "dark";
 
-export type PdfPalette = {
-  accent: string;
-  background: string;
-  border: string;
-  codeBackground: string;
-  codeText: string;
-  heading: string;
-  inlineCodeBackground: string;
-  link: string;
-  mutedBackground: string;
-  mutedText: string;
-  quoteBorder: string;
-  quoteBackground: string;
-  text: string;
-};
+import type { UiMarkdownPdfPreviewPalette } from "@/lib/uiThemeParseSections";
 
-export const PDF_PALETTES: Record<MarkdownToPdfTheme, PdfPalette> = {
-  light: {
-    accent: "#2563eb",
-    background: "#fefefe",
-    border: "#cecece",
-    codeBackground: "#18181b",
-    codeText: "#f4f4f5",
-    heading: "#0f172a",
-    inlineCodeBackground: "#e4e4e7",
-    link: "#1d4ed8",
-    mutedBackground: "#f4f4f5",
-    mutedText: "#52525b",
-    quoteBorder: "#a1a1aa",
-    quoteBackground: "#f8fafc",
-    text: "#18181b",
-  },
-  dark: {
-    accent: "#60a5fa",
-    background: "transparent",
-    border: "#3f3f46",
-    codeBackground: "#09090b",
-    codeText: "#f4f4f5",
-    heading: "#fafafa",
-    inlineCodeBackground: "#3f3f46",
-    link: "#93c5fd",
-    mutedBackground: "#27272a",
-    mutedText: "#d4d4d8",
-    quoteBorder: "#71717a",
-    quoteBackground: "#27272a",
-    text: "#f4f4f5",
-  },
-};
+export type PdfPalette = UiMarkdownPdfPreviewPalette;
 
 export const markdownPlugins = [remarkGfm];
 

@@ -54,8 +54,8 @@ export function PreviewPanel({
   }, [lastBlob, onSaveRenderedPng]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-zinc-200 bg-[#fefefe] dark:border-zinc-700 dark:bg-zinc-950">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 bg-[#fefefe] px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950">
+    <div className="flex h-full min-h-0 flex-col border-l border-[var(--ui-panel-border)] bg-[var(--ui-preview-bg)]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--ui-panel-border)] bg-[var(--ui-preview-bg)] px-3 py-2">
         <span className="text-sm font-semibold">Preview</span>
         <div className="flex items-center gap-2">
           {showVaultPlayground ? <VaultPlaygroundOpenButton /> : null}

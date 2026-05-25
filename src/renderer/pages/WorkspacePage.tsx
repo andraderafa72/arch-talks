@@ -132,7 +132,7 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
           isElectron={isElectron}
         />
         <div
-          className="cursor-col-resize bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+          className="cursor-col-resize bg-[var(--ui-border)] hover:opacity-80"
           onMouseDown={startFilesSidebarDrag}
         />
         <ChatPanel

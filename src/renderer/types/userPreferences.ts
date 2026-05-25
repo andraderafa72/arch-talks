@@ -1,4 +1,7 @@
+import { DEFAULT_UI_THEME_ID } from "../lib/uiThemeConstants";
+import { normalizeUiThemeId } from "../lib/normalizeUiThemeId";
 import type { ThemeMode, UiLocale } from "@/types";
+import { parseUiTheme, type UiThemeV1 } from "./uiTheme";
 
 export type WorkspaceLayoutPreferences = {
   leftWidth: number;
@@ -11,6 +14,8 @@ export type WorkspaceLayoutPreferences = {
 export type UserPreferencesV1 = {
   version: 1;
   theme: ThemeMode;
+  uiThemeId: string;
+  customUiThemes: UiThemeV1[];
   locale: UiLocale;
   lastRoute: string;
   activeConversationId: string;
@@ -27,6 +32,8 @@ export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutPreferences = {
 export const DEFAULT_USER_PREFERENCES: UserPreferencesV1 = {
   version: 1,
   theme: "light",
+  uiThemeId: DEFAULT_UI_THEME_ID,
+  customUiThemes: [],
   locale: "en",
   lastRoute: "/",
   activeConversationId: "",
@@ -42,9 +49,22 @@ export const VALID_APP_ROUTES = [
   "/tools/markdown-pdf",
   "/tools/uml-render",
   "/tools/latex-tectonic",
+  "/themes",
 ] as const;
 
 export type AppRoute = (typeof VALID_APP_ROUTES)[number];
+
+function parseCustomUiThemesFromPrefs(raw: unknown): UiThemeV1[] {
+  if (!Array.isArray(raw)) return [];
+  const themes: UiThemeV1[] = [];
+  for (const item of raw) {
+    const result = parseUiTheme(item);
+    if (result.ok && !result.theme.builtIn) {
+      themes.push({ ...result.theme, builtIn: false });
+    }
+  }
+  return themes;
+}
 
 export function normalizeAppRoute(route: string | undefined): AppRoute {
   if (route && (VALID_APP_ROUTES as readonly string[]).includes(route)) {
@@ -89,9 +109,16 @@ export function parseUserPreferences(raw: unknown): UserPreferencesV1 {
   const locale = value.locale === "pt" ? "pt" : "en";
   const activeConversationId = typeof value.activeConversationId === "string" ? value.activeConversationId : "";
   const lastRoute = normalizeAppRoute(typeof value.lastRoute === "string" ? value.lastRoute : undefined);
+  const customUiThemes = parseCustomUiThemesFromPrefs(value.customUiThemes);
+  const uiThemeId = normalizeUiThemeId(
+    typeof value.uiThemeId === "string" ? value.uiThemeId : undefined,
+    customUiThemes,
+  );
   return {
     version: 1,
     theme,
+    uiThemeId,
+    customUiThemes,
     locale,
     lastRoute,
     activeConversationId,
@@ -109,6 +136,7 @@ export function mergeUserPreferences(
     workspaceLayout: patch.workspaceLayout
       ? { ...current.workspaceLayout, ...patch.workspaceLayout }
       : current.workspaceLayout,
+    customUiThemes: patch.customUiThemes ?? current.customUiThemes,
     version: 1,
   });
 }

@@ -24,7 +24,15 @@ import type {
 } from "@/types";
 import type { UserPreferencesV1 } from "@/types/userPreferences";
 import type { LocalAiSelection, VaultIngestionPlan } from "@/types/electron-api";
-import { applyDocumentTheme } from "@/lib/documentTheme";
+import { applyDocumentThemeFromId } from "@/lib/documentTheme";
+import {
+  DEFAULT_UI_THEME_ID,
+  getThemeById,
+  listThemes,
+  normalizeUiThemeId,
+} from "@/lib/themeRegistry";
+import type { UiThemeV1 } from "@/types/uiTheme";
+import { duplicateUiTheme as duplicateUiThemeFromSource, parseUiTheme, slugifyThemeId } from "@/types/uiTheme";
 import { chatTabStreamKey } from "@/lib/chatTabStream";
 import { buildVaultPlanProposal, getNextVaultProposalPath } from "@/lib/vaultPlanProposal";
 import type { ChatTabStreamState } from "@/types";
@@ -221,6 +229,8 @@ type EditorState = {
   /** Append a template returned from the API. */
   addTechnicalTemplate: (template: TechnicalTemplate) => void;
   theme: ThemeMode;
+  uiThemeId: string;
+  customUiThemes: UiThemeV1[];
   locale: UiLocale;
   setLocale: (locale: UiLocale) => void;
   errorMessage: string | null;
@@ -252,7 +262,13 @@ type EditorState = {
   patchChatTabStreamText: (documentId: string, tabId: string, streamId: string, text: string) => void;
   clearChatTabStream: (documentId: string, tabId: string) => void;
   setTheme: (theme: ThemeMode) => void;
-  applyUserPreferences: (preferences: Pick<UserPreferencesV1, "theme" | "locale">) => void;
+  setUiThemeId: (uiThemeId: string) => void;
+  saveCustomUiTheme: (theme: UiThemeV1) => void;
+  deleteCustomUiTheme: (id: string) => void;
+  duplicateUiTheme: (sourceId: string, newName: string) => UiThemeV1 | null;
+  applyUserPreferences: (
+    preferences: Pick<UserPreferencesV1, "theme" | "locale" | "uiThemeId" | "customUiThemes">,
+  ) => void;
   setActiveFile: (file: string) => void;
   setFileContent: (file: string, content: string) => void;
   setPendingPatch: (patch: Patch | null) => void;
@@ -470,11 +486,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       technicalTemplates: [...state.technicalTemplates, template],
     })),
   theme: "light",
+  uiThemeId: DEFAULT_UI_THEME_ID,
+  customUiThemes: [],
   locale: "en",
   applyUserPreferences: (preferences) => {
-    applyDocumentTheme(preferences.theme);
+    const customUiThemes = preferences.customUiThemes ?? [];
+    const uiThemeId = normalizeUiThemeId(preferences.uiThemeId, customUiThemes);
+    const theme = preferences.theme;
+    applyDocumentThemeFromId(theme, uiThemeId, customUiThemes);
     set({
-      theme: preferences.theme,
+      theme,
+      uiThemeId,
+      customUiThemes,
       locale: preferences.locale,
     });
   },
@@ -775,8 +798,52 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
 
   setTheme: (theme) => {
-    applyDocumentTheme(theme);
+    const { uiThemeId, customUiThemes } = get();
+    applyDocumentThemeFromId(theme, uiThemeId, customUiThemes);
     set({ theme });
+  },
+
+  setUiThemeId: (uiThemeId) => {
+    const normalized = normalizeUiThemeId(uiThemeId, get().customUiThemes);
+    const { theme, customUiThemes } = get();
+    applyDocumentThemeFromId(theme, normalized, customUiThemes);
+    set({ uiThemeId: normalized });
+  },
+
+  saveCustomUiTheme: (theme) => {
+    const parsed = parseUiTheme({ ...theme, builtIn: false, version: 1 });
+    if (!parsed.ok) return;
+    const next = parsed.theme;
+    set((state) => {
+      const without = state.customUiThemes.filter((t) => t.id !== next.id);
+      const customUiThemes = [...without, next];
+      applyDocumentThemeFromId(state.theme, next.id, customUiThemes);
+      return { customUiThemes, uiThemeId: next.id };
+    });
+  },
+
+  deleteCustomUiTheme: (id) => {
+    set((state) => {
+      const customUiThemes = state.customUiThemes.filter((t) => t.id !== id);
+      const uiThemeId =
+        state.uiThemeId === id ? DEFAULT_UI_THEME_ID : normalizeUiThemeId(state.uiThemeId, customUiThemes);
+      applyDocumentThemeFromId(state.theme, uiThemeId, customUiThemes);
+      return { customUiThemes, uiThemeId };
+    });
+  },
+
+  duplicateUiTheme: (sourceId, newName) => {
+    const source = getThemeById(sourceId, get().customUiThemes);
+    const baseId = slugifyThemeId(newName);
+    let newId = baseId;
+    let n = 1;
+    const existing = new Set(listThemes(get().customUiThemes).map((t) => t.id));
+    while (existing.has(newId)) {
+      newId = `${baseId}-${n++}`;
+    }
+    const duplicate = duplicateUiThemeFromSource(source, newId, newName);
+    get().saveCustomUiTheme(duplicate);
+    return duplicate;
   },
 
   setActiveFile: (file) =>

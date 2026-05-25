@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ConversationPicker } from "@/components/layout/ConversationPicker";
 import { TopBarHoverMenus } from "@/components/layout/TopBarHoverMenus";
 import { useWindowTabsContext } from "@/contexts/WindowTabsContext";
 import { useWorkspaceConversationContext } from "@/contexts/WorkspaceConversationContext";
+import { listThemes } from "@/lib/themeRegistry";
 import { topBarStrings } from "@/lib/uiCopy";
 import { useEditorStore } from "@/state/store";
 import { Moon, Sun } from "lucide-react";
@@ -26,6 +26,9 @@ export function TopBar() {
     goHome,
     theme,
     setTheme,
+    uiThemeId,
+    setUiThemeId,
+    customUiThemes,
     locale,
     setLocale,
     technicalTemplates,
@@ -40,6 +43,7 @@ export function TopBar() {
 
   const section: AppMainSection = (() => {
     if (location.pathname === "/templates") return "templates";
+    if (location.pathname === "/themes") return "templates";
     if (location.pathname === "/conversations") return "conversations";
     if (location.pathname === "/skills/vaults") return "skillsVault";
     if (location.pathname === "/tools/markdown-pdf") return "toolMarkdownPdf";
@@ -49,6 +53,7 @@ export function TopBar() {
   })();
   const saveStatus = fileNames.some((file) => hasUnsavedChanges(file)) ? "unsaved" : "saved";
   const t = topBarStrings(locale);
+  const uiThemes = listThemes(customUiThemes);
   const isToolSection =
     section === "toolMarkdownPdf" || section === "toolUmlRender" || section === "toolLatexTectonic";
   const isWorkspaceSection = section === "editor" || section === "conversations";
@@ -190,6 +195,22 @@ export function TopBar() {
             ],
           },
           {
+            heading: t.uiThemes,
+            items: [
+              ...uiThemes.map((uiTheme) => ({
+                id: `config-ui-theme-${uiTheme.id}`,
+                label: uiTheme.name,
+                selected: uiThemeId === uiTheme.id,
+                onSelect: () => setUiThemeId(uiTheme.id),
+              })),
+              {
+                id: "config-manage-themes",
+                label: t.manageThemes,
+                onSelect: () => navigate("/themes"),
+              },
+            ],
+          },
+          {
             heading: t.language,
             items: [
               {
@@ -219,13 +240,17 @@ export function TopBar() {
       section,
       setLocale,
       setTheme,
+      setUiThemeId,
+      customUiThemes,
+      uiThemeId,
+      uiThemes,
       t,
       theme,
     ],
   );
 
   return (
-    <header className="w-full min-w-0 max-w-full border-b border-zinc-200 bg-[#fefefe] px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950">
+    <header className="w-full min-w-0 max-w-full border-b border-[var(--ui-header-border)] bg-[var(--ui-header-bg)] px-3 py-2 text-[var(--ui-header-fg)]">
       <div className="flex w-full min-w-0 items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 overflow-visible">
           <ConversationPicker
@@ -246,17 +271,19 @@ export function TopBar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Badge className="max-w-[6.5rem] truncate sm:max-w-none">{saveStatus === "saved" ? t.saved : t.unsaved}</Badge>
+          <Badge className="max-w-[6.5rem] truncate border-[var(--ui-header-badge-border)] bg-[var(--ui-header-badge-bg)] text-[var(--ui-header-badge-fg)] sm:max-w-none">
+            {saveStatus === "saved" ? t.saved : t.unsaved}
+          </Badge>
           <button
             type="button"
             role="switch"
             aria-checked={theme === "dark"}
             aria-label={t.toggleTheme}
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-            className="relative inline-flex h-8 w-16 shrink-0 items-center rounded-full border border-zinc-300 bg-zinc-100 p-1 transition-colors dark:border-zinc-600 dark:bg-zinc-800"
+            className="relative inline-flex h-8 w-16 shrink-0 items-center rounded-full border border-[var(--ui-theme-switch-track-border)] bg-[var(--ui-theme-switch-track-bg)] p-1 transition-colors"
           >
             <span
-              className={`absolute left-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-zinc-700 shadow transition-transform dark:bg-zinc-900 dark:text-zinc-200 ${
+              className={`absolute left-1 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--ui-theme-switch-thumb-bg)] text-[var(--ui-theme-switch-thumb-fg)] shadow transition-transform ${
                 theme === "dark" ? "translate-x-8" : "translate-x-0"
               }`}
             >

@@ -198,10 +198,10 @@ function FileTreeItem({
             "group/row flex w-full min-w-0 items-baseline gap-1 rounded-md py-0.5 pl-[14px] pr-2 text-left text-sm leading-snug transition-colors",
             "border border-transparent",
             isActive
-              ? "border-zinc-300 bg-zinc-100 font-medium text-zinc-950 shadow-sm ring-1 ring-zinc-300/90 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:ring-zinc-600"
+              ? "border-[var(--ui-file-tree-active-border)] bg-[var(--ui-file-tree-active-bg)] font-medium text-[var(--ui-file-tree-fg)] shadow-sm ring-1 ring-[var(--ui-file-tree-active-border)]"
               : isSelected
-                ? "border-zinc-300 bg-zinc-100/90 text-zinc-950 ring-1 ring-zinc-300/80 dark:border-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-50 dark:ring-zinc-600"
-                : "text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-900/70",
+                ? "border-[var(--ui-file-tree-active-border)] bg-[var(--ui-file-tree-selected-bg)] text-[var(--ui-file-tree-fg)] ring-1 ring-[var(--ui-file-tree-active-border)]"
+                : "text-[var(--ui-file-tree-fg)] hover:bg-[var(--ui-file-tree-hover-bg)]",
             isRenaming && "ring-1 ring-zinc-400 dark:ring-zinc-500",
           )}
         >
@@ -336,8 +336,8 @@ function FileTreeItem({
           "group/row flex w-full min-w-0 items-center gap-0 rounded-md py-0.5 pr-2 text-left text-sm font-medium leading-snug transition-colors",
           "border border-transparent",
           isSelected
-            ? "border-zinc-300 bg-zinc-100 text-zinc-950 ring-1 ring-zinc-300/90 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:ring-zinc-600"
-            : "text-zinc-600 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900/70",
+            ? "border-[var(--ui-file-tree-active-border)] bg-[var(--ui-file-tree-active-bg)] text-[var(--ui-file-tree-fg)] ring-1 ring-[var(--ui-file-tree-active-border)]"
+            : "text-[var(--ui-file-tree-muted-fg)] hover:bg-[var(--ui-file-tree-hover-bg)]",
           isOver && "bg-sky-100 ring-1 ring-sky-400 dark:bg-sky-950/50 dark:ring-sky-600",
           isRenaming && "ring-1 ring-zinc-400 dark:ring-zinc-500",
         )}
@@ -828,7 +828,7 @@ export function ConversationsSidebar({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col border-r border-zinc-200 bg-[#fefefe] p-2 outline-none dark:border-zinc-700 dark:bg-zinc-950"
+      className="flex h-full min-h-0 flex-col border-r border-[var(--ui-sidebar-border)] bg-[var(--ui-sidebar-bg)] p-2 outline-none"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
@@ -847,7 +847,7 @@ export function ConversationsSidebar({
       }}
     >
       <div className="mb-2 flex items-center justify-between gap-1">
-        <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-300">Files</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--ui-file-tree-muted-fg)]">Files</div>
         {isElectron && onOpenFolder ? (
           <Button
             type="button"

@@ -105,7 +105,7 @@ export function UmlDiagramPreview({ src, alt, zoom, onZoomChange, className }: U
         >
           <ZoomOut className="h-4 w-4" />
         </Button>
-        <span className="min-w-14 text-center text-xs tabular-nums text-zinc-600 dark:text-zinc-400">
+        <span className="min-w-14 text-center text-xs tabular-nums text-[var(--ui-uml-preview-toolbar-fg)]">
           {zoomPercent}%
         </span>
         <Button
@@ -128,14 +128,14 @@ export function UmlDiagramPreview({ src, alt, zoom, onZoomChange, className }: U
         >
           <Maximize2 className="h-4 w-4" />
         </Button>
-        <span className="ml-1 hidden text-xs text-zinc-500 sm:inline dark:text-zinc-400">
+        <span className="ml-1 hidden text-xs text-[var(--ui-uml-preview-muted-fg)] sm:inline">
           Ctrl + scroll para zoom
         </span>
       </div>
       <div
         ref={viewportRef}
         className={cn(
-          "min-h-0 flex-1 overflow-auto rounded-md border border-zinc-200 bg-zinc-50/50 p-2 dark:border-zinc-700 dark:bg-zinc-900/30",
+          "min-h-0 flex-1 overflow-auto rounded-md border border-[var(--ui-uml-preview-canvas-border)] bg-[var(--ui-uml-preview-canvas-bg)] p-2",
           zoom > 1 ? "cursor-grab active:cursor-grabbing" : "",
         )}
         onWheel={handleWheel}
@@ -149,7 +149,7 @@ export function UmlDiagramPreview({ src, alt, zoom, onZoomChange, className }: U
             src={src}
             alt={alt}
             draggable={false}
-            className="rounded border border-zinc-200 dark:border-zinc-700"
+            className="rounded border border-[var(--ui-uml-preview-image-border)]"
             style={{
               width: `${zoom * 100}%`,
               maxWidth: zoom <= 1 ? "100%" : "none",

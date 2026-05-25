@@ -30,6 +30,7 @@ export function labelForRoute(pathname: string, search: string, locale: UiLocale
   if (pathname === "/") return locale === "pt" ? "Início" : "Home";
   if (pathname === "/workspace") return t.workspaceEditor;
   if (pathname === "/templates") return t.templates;
+  if (pathname === "/themes") return t.themes;
   if (pathname === "/conversations") {
     const kind = new URLSearchParams(search).get("kind");
     if (kind === "uml") return t.umlWorkspaces;

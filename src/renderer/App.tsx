@@ -12,6 +12,7 @@ import { HomePage } from "@/pages/HomePage";
 import { LatexTectonicPage } from "@/pages/LatexTectonicPage";
 import { MarkdownToPdfPage } from "@/pages/MarkdownToPdfPage";
 import { TemplatesPage } from "@/pages/TemplatesPage";
+import { ThemesPage } from "@/pages/ThemesPage";
 import { UmlRenderPage } from "@/pages/UmlRenderPage";
 import { VaultSkillsPage } from "@/pages/VaultSkillsPage";
 import { WorkspacePage } from "@/pages/WorkspacePage";
@@ -35,6 +36,7 @@ function AppContent({ theme }: AppContentProps) {
           <Route path="/" element={<HomePage />} />
           <Route path="/workspace" element={<WorkspacePage theme={theme} onGoHome={() => navigate("/")} />} />
           <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/themes" element={<ThemesPage />} />
           <Route path="/conversations" element={<ConversationsPage />} />
           <Route path="/skills/vaults" element={<VaultSkillsPage />} />
           <Route path="/tools/markdown-pdf" element={<MarkdownToPdfPage theme={theme} />} />
@@ -61,16 +63,16 @@ function App() {
 
   const { ready, initialLayout } = useArchitectureBootstrap({ hydrateFromBackend, clearError });
 
-  const shellClassName = `relative flex h-screen min-h-0 flex-col ${theme === "dark" ? "theme-dark dark" : "theme-light"} text-zinc-900 dark:text-zinc-100`;
+  const shellClassName = `relative flex h-screen min-h-0 flex-col ${theme === "dark" ? "theme-dark dark" : "theme-light"} text-[var(--ui-shell-fg)]`;
 
   if (!ready) {
     return (
       <WindowTabsProvider>
         <div
-          className={`flex h-screen flex-col ${theme === "dark" ? "theme-dark dark bg-zinc-950" : "theme-light bg-[#fefefe]"}`}
+          className={`flex h-screen flex-col ${theme === "dark" ? "theme-dark dark" : "theme-light"} bg-[var(--ui-shell-bg)]`}
         >
           <WindowTabBar />
-          <div className="flex flex-1 items-center justify-center text-sm text-zinc-600 dark:text-zinc-300">
+          <div className="flex flex-1 items-center justify-center text-sm text-[var(--ui-muted-fg)]">
             Loading…
           </div>
         </div>

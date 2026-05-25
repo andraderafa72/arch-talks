@@ -10,15 +10,53 @@
 }
 
 :root {
-  font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
+  --ui-font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  --ui-shell-bg: #fefefe;
+  --ui-shell-fg: #111827;
+  --ui-header-bg: #fefefe;
+  --ui-header-border: #e4e4e7;
+  --ui-header-fg: #18181b;
+  --ui-header-btn-bg: #fefefe;
+  --ui-header-btn-border: #e4e4e7;
+  --ui-header-btn-fg: #3f3f46;
+  --ui-header-btn-hover-bg: #f4f4f5;
+  --ui-header-btn-active-bg: #f4f4f5;
+  --ui-header-btn-active-border: #d4d4d8;
+  --ui-header-btn-active-fg: #18181b;
+  --ui-header-badge-bg: #fefefe;
+  --ui-header-badge-border: #e4e4e7;
+  --ui-header-badge-fg: #27272a;
+  --ui-popover-bg: #fefefe;
+  --ui-popover-border: #e4e4e7;
+  --ui-popover-fg: #18181b;
+  --ui-popover-muted-fg: #71717a;
+  --ui-popover-hover-bg: #f4f4f5;
+  --ui-popover-heading-fg: #71717a;
+  --ui-popover-divider-border: #e4e4e7;
+  --ui-popover-selected-fg: #3f3f46;
+  --ui-theme-switch-track-bg: #f4f4f5;
+  --ui-theme-switch-track-border: #d4d4d8;
+  --ui-theme-switch-thumb-bg: #ffffff;
+  --ui-theme-switch-thumb-fg: #3f3f46;
+  --ui-sidebar-bg: #fefefe;
+  --ui-sidebar-border: #e4e4e7;
+  --ui-file-tree-fg: #3f3f46;
+  --ui-file-tree-muted-fg: #71717a;
+  --ui-file-tree-active-bg: #f4f4f5;
+  --ui-file-tree-active-border: #d4d4d8;
+  --ui-file-tree-selected-bg: #f4f4f5;
+  --ui-file-tree-hover-bg: #fafafa;
+  --ui-panel-bg: #fefefe;
+  --ui-panel-border: #e4e4e7;
+  --ui-editor-bg: #ffffff;
+  --ui-editor-fg: #18181b;
+  --ui-preview-bg: #fefefe;
+  --ui-muted-fg: #71717a;
+  --ui-border: #e4e4e7;
+  --ui-scrollbar-thumb: #d4d4d8;
+  --ui-scrollbar-thumb-hover: #a1a1aa;
+
+  font-family: var(--ui-font-family);
 }
 
 html,
@@ -32,7 +70,7 @@ body,
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: #d4d4d8 transparent;
+  scrollbar-color: var(--ui-scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -47,40 +85,27 @@ body,
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #d4d4d8;
+  background-color: var(--ui-scrollbar-thumb);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #a1a1aa;
+  background-color: var(--ui-scrollbar-thumb-hover);
 }
 
 body {
-  background: #fefefe;
-  color: #111827;
+  background: var(--ui-shell-bg);
+  color: var(--ui-shell-fg);
 }
 
 .theme-light {
-  background: #fefefe;
+  background: var(--ui-shell-bg);
+  color: var(--ui-shell-fg);
 }
 
 .theme-dark {
-  background: #0b0e14;
-  color: #f4f4f5;
-}
-
-@variant dark {
-  * {
-    scrollbar-color: #52525b transparent;
-  }
-
-  *::-webkit-scrollbar-thumb {
-    background-color: #52525b;
-  }
-
-  *::-webkit-scrollbar-thumb:hover {
-    background-color: #71717a;
-  }
+  background: var(--ui-shell-bg);
+  color: var(--ui-shell-fg);
 }

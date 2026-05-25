@@ -9,13 +9,13 @@ import { UnsavedTabCloseDialog } from "@/components/tools/UnsavedTabCloseDialog"
 import {
   createDocumentMarkdownComponents,
   markdownPlugins,
-  PDF_PALETTES,
   PRINT_CSS,
   PRINT_MODE_CLASS,
   PRINT_MODE_STYLE,
   PRINT_ROOT_ID,
   type MarkdownToPdfTheme,
 } from "@/components/tools/markdownToPdfConfig";
+import { useActiveUiPalette, useLightUiPalette } from "@/hooks/useActiveUiPalette";
 import { Button } from "@/components/ui/button";
 import { MarkdownToPdfChatProvider } from "@/contexts/MarkdownToPdfChatContext";
 import { MarkdownToPdfToolProvider, useMarkdownToPdfToolContext } from "@/contexts/MarkdownToPdfToolContext";
@@ -34,8 +34,8 @@ function waitForNextPaint(): Promise<void> {
 
 
 function MarkdownToPdfToolContent({ theme }: MarkdownToPdfToolProps) {
-  const previewPalette = PDF_PALETTES[theme];
-  const printPalette = PDF_PALETTES.light;
+  const previewPalette = useActiveUiPalette().markdownPdfPreview;
+  const printPalette = useLightUiPalette().markdownPdfPreview;
   const {
     activeFile,
     activeMarkdown,
@@ -213,9 +213,9 @@ function MarkdownToPdfToolContent({ theme }: MarkdownToPdfToolProps) {
         }
         right={
           <>
-          <div className="flex shrink-0 flex-col gap-1 border-b border-zinc-200 px-3 py-2 dark:border-zinc-700">
+          <div className="flex shrink-0 flex-col gap-1 border-b border-[var(--ui-uml-preview-border)] px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold">Preview</span>
+              <span className="text-sm font-semibold text-[var(--ui-uml-preview-header-fg)]">Preview</span>
               <Button type="button" size="sm" disabled={exporting} onClick={() => void downloadPdf()}>
                 {exporting ? "Exporting..." : "Download PDF"}
               </Button>
@@ -232,7 +232,7 @@ function MarkdownToPdfToolContent({ theme }: MarkdownToPdfToolProps) {
             ) : null}
           </div>
           <div className="min-h-0 flex-1 overflow-auto p-3">
-            <div className="rounded-md border border-zinc-200 dark:border-zinc-700 p-2 overflow-x-auto">
+            <div className="overflow-x-auto rounded-md border border-[var(--ui-md-pdf-border)] p-2">
               <style>{PRINT_CSS}</style>
               <article
                 className="document markdown-doc"

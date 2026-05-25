@@ -83,9 +83,7 @@ export function WindowTabBar() {
       className={cn(
         "grid h-9 shrink-0 select-none border-b",
         controlsOnLeft ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_auto]",
-        theme === "dark"
-          ? "border-zinc-800 bg-zinc-950 text-zinc-100"
-          : "border-zinc-200 bg-[#f4f4f5] text-zinc-900",
+        "border-[var(--ui-header-border)] bg-[var(--ui-header-bg)] text-[var(--ui-header-fg)]",
       )}
       onDoubleClick={chrome.toggleMaximize}
     >
@@ -101,14 +99,10 @@ export function WindowTabBar() {
           type="button"
           className={cn(
             "window-no-drag relative inline-flex h-8 w-9 shrink-0 items-center justify-center border-r",
-            theme === "dark" ? "border-zinc-800" : "border-zinc-200",
+            "border-[var(--ui-header-border)]",
             isHomeActive
-              ? theme === "dark"
-                ? "bg-zinc-900 text-zinc-100"
-                : "bg-[#fefefe] text-zinc-900"
-              : theme === "dark"
-                ? "bg-zinc-950/80 text-zinc-400 hover:bg-zinc-900/70"
-                : "bg-zinc-100/80 text-zinc-600 hover:bg-zinc-100",
+              ? "bg-[var(--ui-panel-bg)] text-[var(--ui-header-fg)]"
+              : "bg-[var(--ui-header-bg)]/80 text-[var(--ui-muted-fg)] hover:bg-[var(--ui-panel-bg)]",
           )}
           aria-label={homeLabel}
           title={homeLabel}
@@ -119,7 +113,7 @@ export function WindowTabBar() {
             className={cn(
               "absolute inset-x-0 top-0 h-0.5 transition-opacity",
               isHomeActive ? "opacity-100" : "opacity-0",
-              theme === "dark" ? "bg-zinc-100" : "bg-zinc-900",
+              "bg-[var(--ui-header-fg)]",
             )}
             aria-hidden="true"
           />
@@ -136,14 +130,10 @@ export function WindowTabBar() {
               key={tab.id}
               className={cn(
                 "window-no-drag group relative flex h-8 max-w-[14rem] shrink-0 items-center gap-1 border-r px-3 text-xs",
-                theme === "dark" ? "border-zinc-800" : "border-zinc-200",
+                "border-[var(--ui-header-border)]",
                 isActive
-                  ? theme === "dark"
-                    ? "bg-zinc-900 text-zinc-100"
-                    : "bg-[#fefefe] text-zinc-900"
-                  : theme === "dark"
-                    ? "bg-zinc-950/80 text-zinc-400 hover:bg-zinc-900/70"
-                    : "bg-zinc-100/80 text-zinc-600 hover:bg-zinc-100",
+                  ? "bg-[var(--ui-panel-bg)] text-[var(--ui-header-fg)]"
+                  : "bg-[var(--ui-header-bg)]/80 text-[var(--ui-muted-fg)] hover:bg-[var(--ui-panel-bg)]",
               )}
               onClick={() => selectTab(tab)}
             >
@@ -172,7 +162,7 @@ export function WindowTabBar() {
                 className={cn(
                   "absolute inset-x-0 top-0 h-0.5 transition-opacity",
                   isActive ? "opacity-100" : "opacity-0",
-                  theme === "dark" ? "bg-zinc-100" : "bg-zinc-900",
+                  "bg-[var(--ui-header-fg)]",
                 )}
                 aria-hidden="true"
               />

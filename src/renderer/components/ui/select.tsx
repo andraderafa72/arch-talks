@@ -66,7 +66,7 @@ export function SelectContent({
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
         className={cn(
-          "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border border-zinc-200 bg-[#fefefe] text-zinc-900 shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100",
+          "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border border-[var(--ui-popover-border)] bg-[var(--ui-popover-bg)] text-[var(--ui-popover-fg)] shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out",
           position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className,
@@ -98,7 +98,7 @@ export function SelectItem({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none focus:bg-zinc-100 focus:text-zinc-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 dark:focus:bg-zinc-800 dark:focus:text-zinc-100",
+        "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none focus:bg-[var(--ui-popover-hover-bg)] focus:text-[var(--ui-popover-fg)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
       )}
       {...props}

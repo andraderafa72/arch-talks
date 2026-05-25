@@ -35,9 +35,12 @@ function MenuPanel({ groups, onSelect }: { groups: HoverMenuGroup[]; onSelect: (
       role="menu"
     >
       {groups.map((group, groupIndex) => (
-        <div key={group.heading ?? groupIndex} className={groupIndex > 0 ? "mt-1 border-t border-zinc-200 pt-1 dark:border-zinc-700" : undefined}>
+        <div
+          key={group.heading ?? groupIndex}
+          className={groupIndex > 0 ? "mt-1 border-t border-[var(--ui-popover-divider-border)] pt-1" : undefined}
+        >
           {group.heading ? (
-            <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-popover-heading-fg)]">
               {group.heading}
             </div>
           ) : null}
@@ -46,20 +49,20 @@ function MenuPanel({ groups, onSelect }: { groups: HoverMenuGroup[]; onSelect: (
               key={item.id}
               type="button"
               role="menuitem"
-              className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--ui-popover-hover-bg)]"
               onClick={() => {
                 item.onSelect();
                 onSelect();
               }}
             >
               <span className="min-w-0 flex-1">
-                <span className="block text-zinc-900 dark:text-zinc-100">{item.label}</span>
+                <span className="block text-[var(--ui-popover-fg)]">{item.label}</span>
                 {item.description ? (
-                  <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">{item.description}</span>
+                  <span className="mt-0.5 block text-xs text-[var(--ui-popover-muted-fg)]">{item.description}</span>
                 ) : null}
               </span>
               {item.selected ? (
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-zinc-700 dark:text-zinc-200" aria-hidden="true" />
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--ui-popover-selected-fg)]" aria-hidden="true" />
               ) : null}
             </button>
           ))}
@@ -171,7 +174,7 @@ export function TopBarHoverMenus({ menus }: TopBarHoverMenusProps) {
           style={{ left: panelLeft }}
           onMouseEnter={clearCloseTimer}
         >
-          <div className="rounded-md border border-zinc-200 bg-[#fefefe] shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+          <div className="rounded-md border border-[var(--ui-popover-border)] bg-[var(--ui-popover-bg)] text-[var(--ui-popover-fg)] shadow-lg">
             <MenuPanel groups={activeMenu.groups} onSelect={() => setOpenMenuId(null)} />
           </div>
         </div>
@@ -199,8 +202,8 @@ const HoverMenuTrigger = forwardRef<
       className={cn(
         "inline-flex h-9 items-center gap-1 rounded-md border px-3 text-sm font-medium transition-colors",
         isOpen || isActive
-          ? "border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-          : "border-transparent bg-transparent text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
+          ? "border-[var(--ui-header-btn-active-border)] bg-[var(--ui-header-btn-active-bg)] text-[var(--ui-header-btn-active-fg)]"
+          : "border-transparent bg-transparent text-[var(--ui-header-btn-fg)] hover:bg-[var(--ui-header-btn-hover-bg)]",
       )}
       onMouseEnter={onOpen}
       onFocus={onOpen}

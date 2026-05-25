@@ -10,6 +10,10 @@ import {
 import { Button } from "@/components/ui/button";
 import type { ChatSystemTone } from "@/types";
 import type { LocalAiModelOption, LocalAiProviderOption, LocalAiSelection } from "@/types/electron-api";
+import {
+  CHAT_AI_CONTROLS_SELECT_CLASS,
+  CHAT_AI_CONTROLS_TEXTAREA_CLASS,
+} from "@/lib/chatThemeClasses";
 import { adjustChatTextareaHeight, handleChatTextareaKeyDown } from "@/lib/chatTextarea";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useEditorStore } from "@/state/store";
@@ -178,9 +182,6 @@ export function ChatAiControls({
       ? (selection?.modelId ?? modelsForProvider[0]?.id)
       : undefined;
 
-  const selectTriggerClass =
-    "w-auto gap-1 border-zinc-200 bg-white text-[12px] text-zinc-700 shadow-none focus:ring-1 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 h-6 min-w-24 px-1.5 py-0";
-
   function handleProviderChange(provider: string) {
     if (!onSelectionChange || loadState.status !== "loaded") return;
     const first = loadState.models.find((m) => m.provider === provider);
@@ -220,7 +221,7 @@ export function ChatAiControls({
         }
         rows={1}
         disabled={isDisabled}
-        className="w-full resize-none rounded-md border border-zinc-200 bg-[#fefefe] px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        className={CHAT_AI_CONTROLS_TEXTAREA_CLASS}
       />
       {isListening || isModelLoading ? (
         <div
@@ -229,10 +230,10 @@ export function ChatAiControls({
           aria-live="polite"
         >
           <span
-            className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500"
+            className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--ui-chat-control-voice-pulse)]"
             aria-hidden="true"
           />
-          <span className="font-medium text-zinc-600 dark:text-zinc-400">
+          <span className="font-medium text-[var(--ui-chat-control-status-fg)]">
             {isModelLoading
               ? voiceStrings.modelLoading
               : isTranscribing
@@ -240,7 +241,7 @@ export function ChatAiControls({
                 : voiceStrings.listening}
           </span>
           {isTranscribing && interimPreview ? (
-            <span className="min-w-0 truncate italic text-zinc-500 dark:text-zinc-500">
+            <span className="min-w-0 truncate italic text-[var(--ui-chat-control-status-fg)]">
               &ldquo;{interimPreview}&rdquo;
             </span>
           ) : null}
@@ -256,7 +257,7 @@ export function ChatAiControls({
                 onValueChange={handleProviderChange}
               >
                 <SelectTrigger
-                  className={selectTriggerClass}
+                  className={CHAT_AI_CONTROLS_SELECT_CLASS}
                   aria-label="Provedor de IA"
                   title="Provedor de IA"
                 >
@@ -277,7 +278,7 @@ export function ChatAiControls({
                   onValueChange={handleModelChange}
                 >
                   <SelectTrigger
-                    className={selectTriggerClass}
+                    className={CHAT_AI_CONTROLS_SELECT_CLASS}
                     aria-label="Modelo"
                     title="Modelo"
                   >

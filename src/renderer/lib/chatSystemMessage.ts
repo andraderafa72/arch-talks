@@ -41,16 +41,7 @@ export function inferSystemToneFromContent(content: string): ChatSystemTone {
   return "info";
 }
 
-export function systemMessageBubbleClass(tone: ChatSystemTone): string {
-  switch (tone) {
-    case "error":
-      return "w-full border border-dashed border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950/30 dark:text-red-200";
-    case "warning":
-      return "w-full border border-dashed border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950/25 dark:text-amber-100";
-    default:
-      return "w-full border border-dashed border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-200";
-  }
-}
+export { chatSystemBubbleClass as systemMessageBubbleClass } from "./chatThemeClasses";
 
 export function systemMarkdownVariant(tone: ChatSystemTone): "system-info" | "system-warning" | "system-error" {
   if (tone === "error") return "system-error";

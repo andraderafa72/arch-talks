@@ -4,6 +4,8 @@ import { Pencil, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { Button } from "@/components/ui/button";
+import { defineRagTalksMonacoTheme, RAG_TALKS_MONACO_THEME_ID } from "@/lib/monacoTheme";
+import { getThemeById } from "@/lib/themeRegistry";
 import { useEditorStore } from "@/state/store";
 
 const diffToolbarBtnClass = "h-6 px-2 text-xs font-normal";
@@ -118,7 +120,14 @@ export function EditorPanel({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [aiDiffReview]);
 
+  const uiThemeId = useEditorStore((s) => s.uiThemeId);
+  const customUiThemes = useEditorStore((s) => s.customUiThemes);
+  const resolvedUiTheme = getThemeById(uiThemeId, customUiThemes);
+  const editorPalette = theme === "dark" ? resolvedUiTheme.dark : resolvedUiTheme.light;
+
   const handleMount = (editor: MonacoEditor.IStandaloneCodeEditor, monaco: Monaco) => {
+    defineRagTalksMonacoTheme(monaco, editorPalette, theme);
+    monaco.editor.setTheme(RAG_TALKS_MONACO_THEME_ID);
     editorRef.current = editor;
     editor.layout();
     if (onSaveActiveFile) {
@@ -133,12 +142,21 @@ export function EditorPanel({
     }
   };
 
-  const handleDiffMount = (editor: MonacoEditor.IStandaloneDiffEditor, _monaco: Monaco) => {
+  const handleDiffMount = (editor: MonacoEditor.IStandaloneDiffEditor, monaco: Monaco) => {
+    defineRagTalksMonacoTheme(monaco, editorPalette, theme);
+    monaco.editor.setTheme(RAG_TALKS_MONACO_THEME_ID);
     diffEditorRef.current = editor;
     editor.layout();
   };
 
-  const monacoTheme = theme === "dark" ? "vs-dark" : "vs-light";
+  useEffect(() => {
+    void import("monaco-editor").then((monaco) => {
+      defineRagTalksMonacoTheme(monaco as unknown as Monaco, editorPalette, theme);
+      monaco.editor.setTheme(RAG_TALKS_MONACO_THEME_ID);
+    });
+  }, [editorPalette, theme]);
+
+  const monacoTheme = RAG_TALKS_MONACO_THEME_ID;
   const editorLanguage = language ?? languageForFile(file);
 
   const showAppliedUndoBar = !aiDiffReview && appliedAiUndo;
@@ -167,7 +185,7 @@ export function EditorPanel({
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       {showTabBar ? (
       <div
-        className="flex shrink-0 gap-0 overflow-x-auto border-b border-zinc-200 bg-zinc-50/90 dark:border-zinc-700 dark:bg-zinc-900/80"
+        className="flex shrink-0 gap-0 overflow-x-auto border-b border-[var(--ui-panel-border)] bg-[var(--ui-header-bg)]"
         role="tablist"
         aria-label="Open files"
       >
@@ -179,10 +197,10 @@ export function EditorPanel({
               key={tabPath}
               role="tab"
               aria-selected={active}
-              className={`flex max-w-[200px] shrink-0 items-center gap-1 border-r border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-700 ${
+              className={`flex max-w-[200px] shrink-0 items-center gap-1 border-r border-[var(--ui-panel-border)] px-2 py-1.5 text-xs ${
                 active
-                  ? "border-b-2 border-b-zinc-800 bg-white dark:border-b-zinc-200 dark:bg-zinc-950"
-                  : "border-b-2 border-b-transparent bg-zinc-100/80 hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                  ? "border-b-2 border-b-[var(--ui-shell-fg)] bg-[var(--ui-panel-bg)]"
+                  : "border-b-2 border-b-transparent bg-[var(--ui-file-tree-hover-bg)] hover:bg-[var(--ui-file-tree-selected-bg)]"
               }`}
             >
               <button

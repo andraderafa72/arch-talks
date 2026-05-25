@@ -1,10 +1,11 @@
 import { ipcMain } from "electron";
-import { partitionChatReply } from "../../markdownPatchFromReply.ts";
+import { partitionChatReply } from "../../structuredPatchFromReply.ts";
 import { buildWorkspaceChatSystemPrompt } from "../chatPrompts.ts";
 import { runLocalAiChat } from "../localAiRuntime.ts";
 import type { LocalAiSelection } from "../../../src/renderer/types/electron-api.ts";
 
 export function registerWorkspaceToolIpc(): void {
+  ipcMain.removeHandler("workspaceChat:send");
   ipcMain.handle("workspaceChat:send", async (event, payload: unknown) => {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       throw new Error("Invalid workspaceChat:send payload");

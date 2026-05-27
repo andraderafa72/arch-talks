@@ -122,6 +122,12 @@ export async function getLocalAiOptions(): Promise<LocalAiOptions> {
   return { providers, models };
 }
 
+export async function isLocalAgentSelection(selection: LocalAiSelection | undefined): Promise<boolean> {
+  if (!selection?.provider) return false;
+  const opts = await getLocalAiOptions();
+  return opts.providers.find((p) => p.provider === selection.provider)?.category === "local-agent";
+}
+
 function resolveSelectedModel(runtime: LocalAIProviderRuntime, selection: LocalAiSelection | undefined) {
   if (selection?.provider) {
     const matched = runtime.availableModels.find(

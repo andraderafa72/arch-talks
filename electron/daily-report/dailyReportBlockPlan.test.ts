@@ -24,9 +24,9 @@ describe("dailyReportBlockPlan", () => {
     ];
     const summary: DailyReportSummary = {
       entries: [
-        { hours: 2, description: "a", categoryId: "development", taskTypeId: "feature-work" },
-        { hours: 1, description: "b", categoryId: "development", taskTypeId: "bugfix" },
-        { hours: 1, description: "c", categoryId: "meetings", taskTypeId: "standup" },
+        { hours: 2, description: "a", categoryId: "development", taskTypeId: "features-development" },
+        { hours: 1, description: "b", categoryId: "development", taskTypeId: "bug-fixing" },
+        { hours: 1, description: "c", categoryId: "internal-process", taskTypeId: "technical-screenings" },
       ],
     };
     assert.deepEqual(validateSummaryAgainstBlockPlan(summary, plan), { ok: true });
@@ -35,7 +35,7 @@ describe("dailyReportBlockPlan", () => {
   it("rejects wrong entry count", () => {
     const plan = [{ hours: 1, count: 2 }];
     const summary: DailyReportSummary = {
-      entries: [{ hours: 1, description: "a", categoryId: "development", taskTypeId: "feature-work" }],
+      entries: [{ hours: 1, description: "a", categoryId: "development", taskTypeId: "features-development" }],
     };
     const result = validateSummaryAgainstBlockPlan(summary, plan);
     assert.equal(result.ok, false);

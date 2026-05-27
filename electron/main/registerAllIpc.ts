@@ -9,6 +9,7 @@ import { registerUserPreferencesIpc } from "./ipc/userPreferences.ts";
 import { registerVaultSkillsIpc } from "./ipc/vaultSkills.ts";
 import { registerVaultToolIpc } from "./ipc/vaultTool.ts";
 import { registerWorkspaceToolIpc } from "./ipc/workspaceTool.ts";
+import { registerSystemDesignToolIpc } from "./ipc/systemDesignTool.ts";
 import { registerDailyReportIpc } from "./ipc/dailyReportTool.ts";
 import { registerSpeechIpc } from "./ipc/speech.ts";
 
@@ -23,6 +24,7 @@ export function registerAllIpc(): void {
   registerMarkdownToolIpc();
   registerUmlToolIpc();
   registerWorkspaceToolIpc();
+  registerSystemDesignToolIpc();
   registerVaultToolIpc();
   registerVaultSkillsIpc();
   registerDailyReportIpc();

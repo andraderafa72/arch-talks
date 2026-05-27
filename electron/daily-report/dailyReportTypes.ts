@@ -32,6 +32,17 @@ export type DailyReportTaskEntry = {
   taskTypeId: string;
 };
 
+export type DailyReportTimeLogEntry = {
+  id: string;
+  description: string;
+  startedAt: string;
+  endedAt: string;
+  hours: number;
+  categoryId?: string;
+  taskTypeId?: string;
+  summaryEntryId?: string;
+};
+
 /** One row in the per-day block plan: `count` entries each lasting `hours`. */
 export type DailyReportBlockSpec = {
   hours: number;
@@ -53,6 +64,7 @@ export type DailyReportDocument = {
   taskBlockPlan?: DailyReportBlockSpec[];
   /** Multiple chat threads per day. */
   chatTabs: DailyReportChatTab[];
+  timeLogs?: DailyReportTimeLogEntry[];
   /** Last selected chat tab; restored on load. */
   activeChatTabId?: string;
   /** @deprecated Migrated to chatTabs on load; not written on save. */

@@ -13,17 +13,17 @@ export function vaultCategoryLabel(category: VaultCategory, locale: UiLocale): s
 
 export function conversationKindLabel(kind: ConversationKind, locale: UiLocale): string {
   if (locale === "pt") {
-    if (kind === "uml") return "UML";
+    if (kind === "system_design") return "Design de sistema";
     if (kind === "vault") return "Cofre de conhecimento";
     return "LaTeX";
   }
-  if (kind === "uml") return "UML";
+  if (kind === "system_design") return "System design";
   if (kind === "vault") return "Knowledge vault";
   return "LaTeX";
 }
 
 export function conversationKindTabPrefix(kind: ConversationKind, locale: UiLocale): string {
-  if (kind === "uml") return "UML";
+  if (kind === "system_design") return locale === "pt" ? "Design" : "System";
   if (kind === "vault") return locale === "pt" ? "Cofre" : "Vault";
   return "LaTeX";
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { ChevronDown, ChevronRight, FilePlus, FolderOpen, FolderPlus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { buildFileTree, collectFolderPaths } from "@/lib/fileTreeUtils";
 
 const PATH_DRAG_TYPE = "application/x-rag-talks-path";
 
@@ -20,50 +21,6 @@ type InlineRenameControl = {
 
 const inlineRenameInputClass =
   "min-w-0 flex-1 rounded-sm border-0 bg-transparent px-1 py-0 text-sm leading-snug outline-none ring-1 ring-zinc-400 dark:ring-zinc-500";
-
-function buildFileTree(paths: string[]): TreeNode[] {
-  const root: TreeNode = { name: "", fullPath: "", isFile: false, children: [] };
-  for (const p of paths) {
-    if (p.includes("..")) continue;
-    const parts = p.split("/").filter(Boolean);
-    if (parts.length === 0) continue;
-    let node = root;
-    for (let i = 0; i < parts.length; i += 1) {
-      const part = parts[i];
-      const isFile = i === parts.length - 1;
-      const fullPath = parts.slice(0, i + 1).join("/");
-      let child = node.children.find((c) => c.name === part);
-      if (!child) {
-        child = { name: part, fullPath, isFile, children: [] };
-        node.children.push(child);
-      } else if (isFile) {
-        child.isFile = true;
-        child.fullPath = fullPath;
-      }
-      node = child;
-    }
-  }
-  const sortTree = (nodes: TreeNode[]): TreeNode[] => {
-    const next = nodes.map((n) => ({ ...n, children: sortTree(n.children) }));
-    return next.sort((a, b) => {
-      if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
-      return a.name.localeCompare(b.name);
-    });
-  };
-  return sortTree(root.children);
-}
-
-function collectFolderPaths(nodes: TreeNode[]): Set<string> {
-  const out = new Set<string>();
-  const walk = (ns: TreeNode[]) => {
-    for (const n of ns) {
-      if (!n.isFile && n.fullPath) out.add(n.fullPath);
-      if (!n.isFile) walk(n.children);
-    }
-  };
-  walk(nodes);
-  return out;
-}
 
 /** Visible tree order for shift-click range; skips `.keep` leaves. */
 function flattenVisiblePaths(nodes: TreeNode[], collapsed: Set<string>): string[] {

@@ -18,6 +18,9 @@ export type ConversationDocumentMeta = {
   fileCount?: number;
   referenceFolderPath?: string;
   referenceExcerpt?: string;
+  scanFolderPath?: string;
+  referencePaths?: string[];
+  systemContextCompletedAt?: string;
   pendingVaultProposal?: VaultPlanProposal | null;
   vaultName?: string;
   vaultRootPath?: string;

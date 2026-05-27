@@ -32,6 +32,30 @@ export type DailyReportTaskEntry = {
   taskTypeId: string;
 };
 
+export type DailyReportTimeLogEntry = {
+  id: string;
+  description: string;
+  startedAt: string;
+  endedAt: string;
+  hours: number;
+  categoryId?: string;
+  taskTypeId?: string;
+  summaryEntryId?: string;
+};
+
+export type DailyReportActiveTimeTracker = {
+  date: string;
+  /** ISO start of the current run segment (legacy: same as first segment). */
+  startedAt: string;
+  description: string;
+  categoryId?: string;
+  taskTypeId?: string;
+  /** Milliseconds counted before the current segment (across pauses). */
+  accumulatedMs?: number;
+  /** When true, the timer is paused and elapsed time is frozen. */
+  paused?: boolean;
+};
+
 export type DailyReportBlockSpec = {
   hours: number;
   count: number;
@@ -50,6 +74,7 @@ export type DailyReportDocument = {
   narrative?: string;
   taskBlockPlan?: DailyReportBlockSpec[];
   chatTabs: DailyReportChatTab[];
+  timeLogs?: DailyReportTimeLogEntry[];
   /** Last selected chat tab; restored on load. */
   activeChatTabId?: string;
   /** @deprecated Migrated to chatTabs on load; not written on save. */
@@ -109,6 +134,16 @@ export function blockPlanTotals(plan: DailyReportBlockSpec[]): {
     totalHours += spec.hours * spec.count;
   }
   return { blockCount, totalHours };
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function isValidReportDate(date: string): boolean {
+  if (!DATE_RE.test(date)) return false;
+  const [y, m, d] = date.split("-").map(Number);
+  if (!y || !m || !d) return false;
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
 
 export function todayIsoDate(): string {

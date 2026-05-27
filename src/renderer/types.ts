@@ -42,7 +42,7 @@ export type AppliedAiEdit = {
 
 export type AppScreen = "home" | "workspace";
 
-export type ConversationKind = "uml" | "technical_document" | "vault";
+export type ConversationKind = "system_design" | "technical_document" | "vault";
 
 export type VaultPlanFileChange = {
   path: string;
@@ -141,6 +141,12 @@ export type Conversation = {
   savedSnapshot: Record<string, string>;
   /** Per-file UML preview zoom (1 = default). */
   umlPreviewZoom?: Record<string, number>;
+  /** Folder the CLI agent should explore (local-agent only). */
+  scanFolderPath?: string;
+  /** Absolute disk paths indexed for @ mentions. */
+  referencePaths?: string[];
+  /** ISO timestamp when SYSTEM.md onboarding completed. */
+  systemContextCompletedAt?: string;
   referenceFolderPath?: string;
   referenceExcerpt?: string;
   pendingVaultProposal?: VaultPlanProposal | null;

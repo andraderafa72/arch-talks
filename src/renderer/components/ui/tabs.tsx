@@ -10,7 +10,10 @@ export function TabsList({
 }: React.ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
-      className={cn("inline-flex h-10 items-center justify-center rounded-md bg-zinc-100 p-1", className)}
+      className={cn(
+        "inline-flex h-10 items-center justify-center rounded-md border border-[var(--ui-panel-border)] bg-[var(--ui-shell-bg)] p-1",
+        className,
+      )}
       {...props}
     />
   );
@@ -23,7 +26,7 @@ export function TabsTrigger({
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium text-zinc-600 ring-offset-white transition-all data-[state=active]:bg-white data-[state=active]:text-zinc-900",
+        "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium text-[var(--ui-chat-tab-inactive-fg)] transition-all hover:bg-[var(--ui-chat-tab-hover-bg)] data-[state=active]:bg-[var(--ui-panel-bg)] data-[state=active]:text-[var(--ui-shell-fg)]",
         className,
       )}
       {...props}

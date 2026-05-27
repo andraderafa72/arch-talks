@@ -1,7 +1,7 @@
 import type { ConversationKind } from "@/types";
 
 export function conversationKindIconBoxClass(kind: ConversationKind): string {
-  if (kind === "uml") {
+  if (kind === "system_design") {
     return "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300";
   }
   if (kind === "vault") {
@@ -11,7 +11,7 @@ export function conversationKindIconBoxClass(kind: ConversationKind): string {
 }
 
 export function conversationKindBadgeClass(kind: ConversationKind): string {
-  if (kind === "uml") {
+  if (kind === "system_design") {
     return "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/80 dark:text-violet-200";
   }
   if (kind === "vault") {

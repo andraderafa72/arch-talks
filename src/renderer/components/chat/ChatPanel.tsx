@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Check, List, Pencil, Plus, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Check, List, Pencil, Plus, Settings, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ChatAiControls } from "@/components/chat/ChatAiControls";
@@ -21,6 +21,9 @@ import {
   systemMarkdownVariant,
 } from "@/lib/chatSystemMessage";
 import { useEditorStore } from "@/state/store";
+import { collectAllPaths, buildFileTree } from "@/lib/fileTreeUtils";
+import { SystemDesignWorkspaceSettings } from "@/components/system-design/SystemDesignWorkspaceSettings";
+import type { MentionAutocompleteConfig } from "@/hooks/useMentionAutocomplete";
 import type { ChatConversationTab, ChatMessage, ChatSystemTone, Patch } from "@/types";
 import type { LocalAiSelection } from "@/types/electron-api";
 
@@ -126,6 +129,14 @@ export function ChatPanel({
   const referenceExcerpt = useEditorStore(
     (s) => s.conversations[s.activeConversationId]?.referenceExcerpt,
   );
+  const scanFolderPath = useEditorStore(
+    (s) => s.conversations[s.activeConversationId]?.scanFolderPath,
+  );
+  const referencePaths = useEditorStore(
+    (s) => s.conversations[s.activeConversationId]?.referencePaths,
+  );
+  const systemMd = useEditorStore((s) => s.conversations[s.activeConversationId]?.files["SYSTEM.md"] ?? "");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
@@ -267,6 +278,7 @@ export function ChatPanel({
       if (typeof window !== "undefined" && window.electronApi) {
         const api = window.electronApi;
         const isVault = conversationKind === "vault";
+        const isSystemDesign = conversationKind === "system_design";
 
         if (isVault && !api.vaultChatSend) {
           onMessage(
@@ -280,7 +292,19 @@ export function ChatPanel({
           return;
         }
 
-        if (!isVault && !api.workspaceChatSend) {
+        if (isSystemDesign && !api.systemDesignChatSend) {
+          onMessage(
+            createSystemMessage(
+              locale === "pt"
+                ? "Chat de design de sistema não disponível nesta versão."
+                : "System design chat is not available in this app version.",
+              "error",
+            ),
+          );
+          return;
+        }
+
+        if (!isVault && !isSystemDesign && !api.workspaceChatSend) {
           onMessage(
             createSystemMessage(
               locale === "pt"
@@ -395,6 +419,22 @@ export function ChatPanel({
                 );
               }
             }
+          } else if (isSystemDesign && api.systemDesignChatSend) {
+            const response = await api.systemDesignChatSend({
+              sessionKey: activeConversationTabId,
+              activeFile,
+              files,
+              systemMd,
+              prompt: promptText,
+              aiSelection,
+              streamId,
+              scanFolderPath,
+              referencePaths: referencePaths ?? [],
+            });
+            commitAssistantMessage(response.reply || "", streamId, streamContext, streamedText());
+            if (response.patch) {
+              onPatchReceived(response.patch as Patch);
+            }
           } else if (api.workspaceChatSend) {
             const response = await api.workspaceChatSend({
               sessionKey: activeConversationTabId,
@@ -496,9 +536,35 @@ export function ChatPanel({
       onPatchReceived,
       referenceExcerpt,
       referenceFolderPath,
+      referencePaths,
+      scanFolderPath,
       stageVaultProposal,
+      systemMd,
     ],
   );
+
+  const workspacePaths = useMemo(
+    () => collectAllPaths(buildFileTree(Object.keys(files))),
+    [files],
+  );
+
+  const mentionConfig = useMemo((): MentionAutocompleteConfig | undefined => {
+    if (conversationKind !== "system_design") return undefined;
+    return {
+      enabled: true,
+      workspacePaths,
+      referencePaths: referencePaths ?? [],
+      listReferenceEntries: async (query) => {
+        const api = window.electronApi;
+        if (!api?.systemDesignListReferenceEntries) return [];
+        const result = await api.systemDesignListReferenceEntries({
+          referencePaths: referencePaths ?? [],
+          query,
+        });
+        return result.entries;
+      },
+    };
+  }, [conversationKind, referencePaths, workspacePaths]);
 
   const handleSystemMessage = useCallback(
     (content: string, tone: ChatSystemTone = "info") => {
@@ -638,6 +704,19 @@ export function ChatPanel({
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
         </Button>
+        {conversationKind === "system_design" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 px-2"
+            onClick={() => setSettingsOpen(true)}
+            aria-label={locale === "pt" ? "Definições do espaço" : "Workspace settings"}
+            title={locale === "pt" ? "Definições do espaço" : "Workspace settings"}
+          >
+            <Settings className="h-3.5 w-3.5" aria-hidden="true" />
+          </Button>
+        ) : null}
       </div>
       <ScrollArea className="min-h-0 min-w-0 flex-1 px-5 py-3">
         <div ref={messagesContainerRef} className="flex min-w-0 w-full flex-col space-y-3">
@@ -701,13 +780,31 @@ export function ChatPanel({
         <ChatAiControls
           selection={aiSelection}
           onSelectionChange={onAiSelectionChange}
-          placeholder="Describe requested patch..."
+          placeholder={
+            conversationKind === "system_design"
+              ? locale === "pt"
+                ? "Peça diagramas ou descreva alterações… (@ para referenciar ficheiros)"
+                : "Ask for diagrams or describe changes… (@ to reference files)"
+              : "Describe requested patch..."
+          }
+          mentionConfig={mentionConfig}
           onSubmit={handleSubmit}
           onStop={handleStop}
           onSystemMessage={handleSystemMessage}
           onLoadingChange={setIsGenerating}
         />
       </div>
+      {settingsOpen && conversationKind === "system_design" ? (
+        <SystemDesignWorkspaceSettings
+          documentId={activeConversationId}
+          locale={locale}
+          scanFolderPath={scanFolderPath}
+          referencePaths={referencePaths}
+          aiSelection={aiSelection}
+          hasSystemMd={Boolean(files["SYSTEM.md"]?.trim())}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

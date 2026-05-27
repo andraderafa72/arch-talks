@@ -24,7 +24,7 @@ describe("dailyReportIo", () => {
           hours: 2,
           description: "Feature work",
           categoryId: "development",
-          taskTypeId: "feature-work",
+          taskTypeId: "features-development",
         },
       ],
       chatTabs: [
@@ -53,6 +53,18 @@ describe("dailyReportIo", () => {
         },
       ],
       activeChatTabId: "tab-a",
+      timeLogs: [
+        {
+          id: "log-1",
+          description: "API work",
+          startedAt: "2026-05-25T09:00:00.000Z",
+          endedAt: "2026-05-25T10:30:00.000Z",
+          hours: 1.5,
+          categoryId: "development",
+          taskTypeId: "features-development",
+          summaryEntryId: "entry-1",
+        },
+      ],
       createdAt: "2026-05-25T08:00:00.000Z",
       updatedAt: "2026-05-25T08:00:00.000Z",
     };
@@ -74,6 +86,9 @@ describe("dailyReportIo", () => {
     assert.equal(loaded.chatTabs[0]?.id, "tab-a");
     assert.equal(loaded.chatTabs[0]?.messages.length, 2);
     assert.equal(loaded.activeChatTabId, "tab-a");
+    assert.equal(loaded.timeLogs?.length, 1);
+    assert.equal(loaded.timeLogs?.[0]?.description, "API work");
+    assert.equal(loaded.timeLogs?.[0]?.summaryEntryId, "entry-1");
     assert.ok(loaded.updatedAt >= doc.updatedAt);
   });
 });

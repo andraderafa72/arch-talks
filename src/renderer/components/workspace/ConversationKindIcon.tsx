@@ -8,7 +8,7 @@ export function ConversationKindIcon({
   kind: ConversationKind;
   className?: string;
 }) {
-  if (kind === "uml") {
+  if (kind === "system_design") {
     return <GitBranch className={className} aria-hidden="true" />;
   }
   if (kind === "vault") {

@@ -11,6 +11,7 @@ import { exposeWindowControlsApis } from "./exposeWindowControls.ts";
 import { exposeIntegrationsApi } from "./exposeIntegrations.ts";
 import { exposeSpeechApis } from "./exposeSpeech.ts";
 import { exposeDailyReportApis } from "./exposeDailyReport.ts";
+import { exposeSystemDesignApis } from "./exposeSystemDesign.ts";
 
 export function buildElectronApi(): ElectronApi {
   return {
@@ -27,5 +28,6 @@ export function buildElectronApi(): ElectronApi {
     ...exposeUserPreferencesApis(),
     ...exposeIntegrationsApi(),
     ...exposeDailyReportApis(),
+    ...exposeSystemDesignApis(),
   };
 }

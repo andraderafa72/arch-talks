@@ -38,6 +38,9 @@ export type DocumentMeta = {
   fileCount?: number;
   referenceFolderPath?: string;
   referenceExcerpt?: string;
+  scanFolderPath?: string;
+  referencePaths?: string[];
+  systemContextCompletedAt?: string;
   pendingVaultProposal?: unknown;
   vaultName?: string;
   vaultRootPath?: string;
@@ -353,6 +356,9 @@ export async function readArchitectureConversationsUnified(): Promise<JsonDocume
       history: [],
       referenceFolderPath: meta.referenceFolderPath,
       referenceExcerpt: meta.referenceExcerpt,
+      scanFolderPath: meta.scanFolderPath,
+      referencePaths: meta.referencePaths,
+      systemContextCompletedAt: meta.systemContextCompletedAt,
       pendingVaultProposal: meta.pendingVaultProposal ?? null,
       vaultName: meta.vaultName,
       vaultRootPath: meta.vaultRootPath,
@@ -385,6 +391,9 @@ export async function writeAllChatsFromDocument(doc: JsonDocument<unknown>): Pro
       history?: unknown[];
       referenceFolderPath?: string;
       referenceExcerpt?: string;
+      scanFolderPath?: string;
+      referencePaths?: string[];
+      systemContextCompletedAt?: string;
       pendingVaultProposal?: unknown;
       vaultName?: string;
       vaultRootPath?: string;
@@ -411,6 +420,9 @@ export async function writeAllChatsFromDocument(doc: JsonDocument<unknown>): Pro
       activeChatTabId: row.activeChatTabId ?? row.chatTabs?.[0]?.id ?? "chat-1",
       referenceFolderPath: row.referenceFolderPath,
       referenceExcerpt: row.referenceExcerpt,
+      scanFolderPath: row.scanFolderPath,
+      referencePaths: row.referencePaths,
+      systemContextCompletedAt: row.systemContextCompletedAt,
       pendingVaultProposal: row.pendingVaultProposal ?? null,
       vaultName: row.vaultName,
       vaultRootPath: row.vaultRootPath,

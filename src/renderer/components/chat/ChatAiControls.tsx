@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { MentionSuggestionsPopover } from "@/components/chat/MentionSuggestionsPopover";
 import type { ChatSystemTone } from "@/types";
 import type { LocalAiModelOption, LocalAiProviderOption, LocalAiSelection } from "@/types/electron-api";
 import {
@@ -15,8 +16,10 @@ import {
   CHAT_AI_CONTROLS_TEXTAREA_CLASS,
 } from "@/lib/chatThemeClasses";
 import { adjustChatTextareaHeight, handleChatTextareaKeyDown } from "@/lib/chatTextarea";
+import { useMentionAutocomplete, type MentionAutocompleteConfig } from "@/hooks/useMentionAutocomplete";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useEditorStore } from "@/state/store";
+import type { MentionSuggestion } from "@/lib/mentionTokens";
 
 export type ChatAiControlsProps = {
   selection?: LocalAiSelection | undefined;
@@ -28,6 +31,8 @@ export type ChatAiControlsProps = {
   onStop?: () => void | Promise<void>;
   onSystemMessage?: (message: string, tone?: ChatSystemTone) => void;
   onLoadingChange?: (loading: boolean) => void;
+  mentionConfig?: MentionAutocompleteConfig;
+  onProvidersLoaded?: (providers: LocalAiProviderOption[]) => void;
 };
 
 type LoadState =
@@ -56,12 +61,22 @@ export function ChatAiControls({
   onStop,
   onSystemMessage,
   onLoadingChange,
+  mentionConfig,
+  onProvidersLoaded,
 }: ChatAiControlsProps) {
   const locale = useEditorStore((s) => s.locale);
   const stopLabel = locale === "pt" ? "Interromper geração" : "Stop generating";
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [caret, setCaret] = useState(0);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const mentionAutocomplete = useMentionAutocomplete(prompt, caret, mentionConfig ?? { enabled: false, workspacePaths: [], referencePaths: [] });
+
+  useEffect(() => {
+    setMentionActiveIndex(0);
+  }, [mentionAutocomplete.suggestions.length, mentionAutocomplete.mentionStart]);
 
   const handleFinalTranscript = useCallback((text: string) => {
     setPrompt((current) => appendTranscript(current, text));
@@ -109,6 +124,14 @@ export function ChatAiControls({
           return;
         }
         setLoadState({ status: "loaded", providers: opts.providers, models: opts.models });
+        onProvidersLoaded?.(opts.providers);
+        if (onSelectionChange && !selection?.provider) {
+          const first = opts.providers[0];
+          if (first) {
+            const firstModel = opts.models.find((m) => m.provider === first.provider);
+            onSelectionChange({ provider: first.provider, modelId: firstModel?.id });
+          }
+        }
       })
       .catch(() => {
         setLoadState({ status: "empty" });
@@ -193,12 +216,33 @@ export function ChatAiControls({
     onSelectionChange({ provider: activeProvider, modelId });
   }
 
-  function handlePromptChange(nextValue: string) {
+  function handlePromptChange(nextValue: string, nextCaret?: number) {
     setPrompt(nextValue);
+    if (typeof nextCaret === "number") setCaret(nextCaret);
+    else setCaret(nextValue.length);
     if (interimTranscript.length > 0) {
       clearInterimTranscript();
     }
   }
+
+  const applyMention = useCallback(
+    (suggestion: MentionSuggestion) => {
+      const el = textareaRef.current;
+      const currentCaret = el?.selectionStart ?? caret;
+      const { value, caret: nextCaret } = mentionAutocomplete.applySuggestion(
+        suggestion,
+        prompt,
+        currentCaret,
+      );
+      handlePromptChange(value, nextCaret);
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) return;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(nextCaret, nextCaret);
+      });
+    },
+    [caret, mentionAutocomplete, prompt],
+  );
 
   const interimPreview =
     interimTranscript.length > 48
@@ -207,22 +251,60 @@ export function ChatAiControls({
 
   return (
     <div className="flex flex-col gap-2">
-      <textarea
-        ref={textareaRef}
-        placeholder={placeholder}
-        value={displayValue}
-        onChange={(event) => handlePromptChange(event.target.value)}
-        onKeyDown={(event) =>
-          handleChatTextareaKeyDown(event, {
-            onSubmit: (value) => {
-              void handleSubmit(value);
-            },
-          })
-        }
-        rows={1}
-        disabled={isDisabled}
-        className={CHAT_AI_CONTROLS_TEXTAREA_CLASS}
-      />
+      <div className="relative">
+        <textarea
+          ref={textareaRef}
+          placeholder={placeholder}
+          value={displayValue}
+          onChange={(event) => {
+            handlePromptChange(event.target.value, event.target.selectionStart);
+          }}
+          onClick={(event) => setCaret(event.currentTarget.selectionStart)}
+          onKeyUp={(event) => setCaret(event.currentTarget.selectionStart)}
+          onKeyDown={(event) => {
+            if (mentionAutocomplete.isOpen && mentionAutocomplete.suggestions.length > 0) {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setMentionActiveIndex((i) => (i + 1) % mentionAutocomplete.suggestions.length);
+                return;
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setMentionActiveIndex(
+                  (i) =>
+                    (i - 1 + mentionAutocomplete.suggestions.length) %
+                    mentionAutocomplete.suggestions.length,
+                );
+                return;
+              }
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                const picked = mentionAutocomplete.suggestions[mentionActiveIndex];
+                if (picked) applyMention(picked);
+                return;
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                return;
+              }
+            }
+            handleChatTextareaKeyDown(event, {
+              onSubmit: (value) => {
+                void handleSubmit(value);
+              },
+            });
+          }}
+          rows={1}
+          disabled={isDisabled}
+          className={CHAT_AI_CONTROLS_TEXTAREA_CLASS}
+        />
+        <MentionSuggestionsPopover
+          open={mentionAutocomplete.isOpen}
+          suggestions={mentionAutocomplete.suggestions}
+          activeIndex={mentionActiveIndex}
+          onSelect={applyMention}
+        />
+      </div>
       {isListening || isModelLoading ? (
         <div
           className="flex min-w-0 items-center gap-2 text-xs"

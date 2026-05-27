@@ -57,6 +57,9 @@ export type ApiConversationRow = {
   openEditorTabs?: string[];
   referenceFolderPath?: string;
   referenceExcerpt?: string;
+  scanFolderPath?: string;
+  referencePaths?: string[];
+  systemContextCompletedAt?: string;
   pendingVaultProposal?: VaultPlanProposal | null;
   vaultName?: string;
   vaultRootPath?: string;
@@ -141,7 +144,11 @@ function mapCommit(row: ApiCommit): Commit {
 
 export function mapApiConversation(row: ApiConversationRow): Conversation {
   const kind: ConversationKind =
-    row.kind === "uml" ? "uml" : row.kind === "vault" ? "vault" : "technical_document";
+    row.kind === "system_design" || row.kind === "uml"
+      ? "system_design"
+      : row.kind === "vault"
+        ? "vault"
+        : "technical_document";
   const files = row.files && Object.keys(row.files).length > 0 ? { ...row.files } : {};
   const activeFile =
     row.activeFile &&
@@ -149,8 +156,8 @@ export function mapApiConversation(row: ApiConversationRow): Conversation {
       row.pendingVaultProposal?.changes.some((c) => c.path === row.activeFile) ||
       (kind === "vault" && Boolean(row.vaultRootPath)))
       ? row.activeFile
-      : kind === "uml"
-        ? Object.keys(files).find((k) => k.endsWith(".puml")) ?? "diagrams/auth-flow.puml"
+      : kind === "system_design"
+        ? Object.keys(files).find((k) => k.endsWith(".puml")) ?? "diagrams/context.puml"
         : kind === "vault"
           ? defaultVaultActiveFile(files)
           : "main.tex";
@@ -181,6 +188,9 @@ export function mapApiConversation(row: ApiConversationRow): Conversation {
     savedSnapshot,
     referenceFolderPath: row.referenceFolderPath,
     referenceExcerpt: row.referenceExcerpt,
+    scanFolderPath: row.scanFolderPath,
+    referencePaths: row.referencePaths ?? [],
+    systemContextCompletedAt: row.systemContextCompletedAt,
     pendingVaultProposal: row.pendingVaultProposal ?? null,
     vaultName: row.vaultName,
     vaultRootPath: row.vaultRootPath,

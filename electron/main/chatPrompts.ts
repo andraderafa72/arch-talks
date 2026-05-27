@@ -37,6 +37,78 @@ ${PATCH_YAML_INSTRUCTIONS(activeFile)}
 Keep responses concise and focused.`;
 }
 
+export function buildSystemContextOnboardingPrompt(scanFolderPath?: string): string {
+  const scanBlock = scanFolderPath?.trim()
+    ? `\n## Codebase to explore\nThe user's existing system lives at: \`${scanFolderPath.trim()}\`\nExplore relevant source, configuration, and documentation on disk to infer architecture. Ask clarifying questions about anything ambiguous.\n`
+    : "";
+
+  return `You are a system design context assistant. Your job is to help the user define a software system before they create architecture diagrams.
+
+${scanBlock}
+## Your task
+- Ask structured questions about: purpose, actors, external systems, core capabilities, data flows, constraints, tech stack, scale, and non-goals.
+- Extract as much durable context as possible from the user's answers${scanFolderPath ? " and the codebase" : ""}.
+- Do not emit PlantUML, YAML patches, or file edits during this phase.
+- When the user signals they are done, summarize everything gathered in clear prose (sections: Overview, Actors, External systems, Capabilities, Data, Flows, Constraints, Technology, Open questions).
+- Keep replies concise; prefer one focused question at a time when context is missing.`;
+}
+
+export function buildSystemMdMaterializationPrompt(): string {
+  return `You are a system design document writer. Synthesize the conversation into a single SYSTEM.md file.
+
+Output **only** markdown (no code fences wrapping the whole document). Use this structure:
+
+# System: {name}
+## Overview
+## Actors & users
+## External systems
+## Core capabilities
+## Data & persistence
+## Key flows
+## Constraints & NFRs
+## Technology
+## Open questions
+
+Fill every section from the conversation. Use bullet lists where helpful. Do not invent major facts not supported by the conversation.`;
+}
+
+export function buildSystemDesignChatSystemPrompt(options: {
+  activeFile: string;
+  files: Record<string, string>;
+  systemMd: string;
+  scanFolderPath?: string;
+  mentionContexts?: { label: string; excerpt: string }[];
+}): string {
+  const fileEntries = Object.entries(options.files)
+    .filter(([name]) => name !== "SYSTEM.md" || name === options.activeFile)
+    .map(([name, content]) => `### ${name}\n\`\`\`\n${content}\n\`\`\``)
+    .join("\n\n");
+
+  const scanBlock = options.scanFolderPath?.trim()
+    ? `\n## Agent scan folder\nThe system codebase is at: \`${options.scanFolderPath.trim()}\`. You may reference it when proposing diagrams.\n`
+    : "";
+
+  const mentionBlock =
+    options.mentionContexts && options.mentionContexts.length > 0
+      ? `\n## Referenced context\n${options.mentionContexts.map((c) => `### ${c.label}\n${c.excerpt}`).join("\n\n")}\n`
+      : "";
+
+  return `You are a system design and PlantUML diagram assistant. The user is modeling a system with architecture diagrams.
+
+## System context (authoritative)
+${options.systemMd.trim() || "(SYSTEM.md is empty — align with user messages)"}
+${scanBlock}${mentionBlock}
+Active diagram file: ${options.activeFile}
+
+Workspace files:
+${fileEntries || "(no other files)"}
+
+${PATCH_YAML_INSTRUCTIONS(options.activeFile)}
+
+Output valid PlantUML when proposing full files (e.g. @startuml … @enduml).
+Keep diagrams aligned with SYSTEM.md. Keep responses concise and focused.`;
+}
+
 export function buildMarkdownChatSystemPrompt(activeFile: string, fileContent: string): string {
   return `You are a helpful markdown editing assistant. The user is editing a markdown document.
 

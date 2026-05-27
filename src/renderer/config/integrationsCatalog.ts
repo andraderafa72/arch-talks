@@ -1,7 +1,7 @@
 import { INTEGRATION_IDS, type IntegrationId } from "../../../shared/integrations.ts";
 import type { UiLocale } from "@/types";
 
-export type IntegrationFeature = "uml" | "latex" | "commerce";
+export type IntegrationFeature = "system_design" | "latex" | "commerce";
 
 export type IntegrationCatalogMeta = {
   id: IntegrationId;
@@ -13,7 +13,7 @@ export type IntegrationCatalogMeta = {
 export const INTEGRATION_CATALOG_META: IntegrationCatalogMeta[] = [
   {
     id: "kroki",
-    requiredBy: ["uml"],
+    requiredBy: ["system_design"],
     docsUrl: "https://docs.kroki.io/",
   },
   {

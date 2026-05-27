@@ -2,7 +2,11 @@ import { INTEGRATION_IDS, type IntegrationId } from "../../../shared/integration
 import { DEFAULT_UI_THEME_ID } from "../lib/uiThemeConstants";
 import { normalizeUiThemeId } from "../lib/normalizeUiThemeId";
 import type { ThemeMode, UiLocale } from "@/types";
+import type { DailyReportActiveTimeTracker } from "./daily-report";
+import { isValidReportDate } from "./daily-report";
 import { parseUiTheme, type UiThemeV1 } from "./uiTheme";
+
+export type { DailyReportActiveTimeTracker };
 
 export type { IntegrationId };
 
@@ -24,6 +28,7 @@ export type WorkspaceLayoutPreferences = {
 
 export type DailyReportsPreferences = {
   storageRootPath?: string | null;
+  activeTimeTracker?: DailyReportActiveTimeTracker | null;
 };
 
 export type UserPreferencesV1 = {
@@ -127,13 +132,39 @@ function parseIntegrations(value: unknown): IntegrationsPreferences {
   return base;
 }
 
+function parseActiveTimeTracker(value: unknown): DailyReportActiveTimeTracker | null | undefined {
+  if (value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  const date = typeof row.date === "string" ? row.date.trim() : "";
+  const startedAt = typeof row.startedAt === "string" ? row.startedAt : "";
+  const description = typeof row.description === "string" ? row.description.trim() : "";
+  if (!isValidReportDate(date) || !startedAt || !description) return undefined;
+  const tracker: DailyReportActiveTimeTracker = { date, startedAt, description };
+  const categoryId = typeof row.categoryId === "string" ? row.categoryId.trim() : "";
+  const taskTypeId = typeof row.taskTypeId === "string" ? row.taskTypeId.trim() : "";
+  if (categoryId) tracker.categoryId = categoryId;
+  if (taskTypeId) tracker.taskTypeId = taskTypeId;
+  const accumulatedMs = typeof row.accumulatedMs === "number" && Number.isFinite(row.accumulatedMs)
+    ? Math.max(0, row.accumulatedMs)
+    : undefined;
+  if (accumulatedMs !== undefined) tracker.accumulatedMs = accumulatedMs;
+  if (row.paused === true) tracker.paused = true;
+  return tracker;
+}
+
 function parseDailyReports(value: unknown): DailyReportsPreferences | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const row = value as Record<string, unknown>;
+  const result: DailyReportsPreferences = {};
   const path = row.storageRootPath;
-  if (path === null) return { storageRootPath: null };
-  if (typeof path === "string" && path.trim()) return { storageRootPath: path.trim() };
-  return undefined;
+  if (path === null) result.storageRootPath = null;
+  else if (typeof path === "string" && path.trim()) result.storageRootPath = path.trim();
+  if ("activeTimeTracker" in row) {
+    const tracker = parseActiveTimeTracker(row.activeTimeTracker);
+    if (tracker !== undefined) result.activeTimeTracker = tracker;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function parseWorkspaceLayout(value: unknown): WorkspaceLayoutPreferences {

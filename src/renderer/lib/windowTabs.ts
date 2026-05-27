@@ -35,7 +35,7 @@ export function labelForRoute(pathname: string, search: string, locale: UiLocale
   if (pathname === "/configuration/integrations") return t.integrations;
   if (pathname === "/conversations") {
     const kind = new URLSearchParams(search).get("kind");
-    if (kind === "uml") return t.umlWorkspaces;
+    if (kind === "system_design") return t.systemDesignWorkspaces;
     if (kind === "technical_document") return t.latexWorkspaces;
     if (kind === "vault") return t.vaultWorkspaces;
     return t.allWorkspaces;

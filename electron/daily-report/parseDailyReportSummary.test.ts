@@ -15,7 +15,7 @@ dailyReportSummary:
     - hours: 3
       description: "Built calendar navigation"
       category_id: development
-      task_type_id: feature-work
+      task_type_id: features-development
 \`\`\``;
 
 describe("parseDailyReportSummary", () => {
@@ -27,7 +27,7 @@ describe("parseDailyReportSummary", () => {
     assert.equal(summary.entries.length, 1);
     assert.equal(summary.entries[0]!.hours, 3);
     assert.equal(summary.entries[0]!.categoryId, "development");
-    assert.equal(summary.entries[0]!.taskTypeId, "feature-work");
+    assert.equal(summary.entries[0]!.taskTypeId, "features-development");
     assert.equal(summary.narrative, "Solid dev day");
   });
 

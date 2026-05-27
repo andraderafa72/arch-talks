@@ -298,10 +298,14 @@ type EditorState = {
   keepAllVaultProposalFiles: () => Promise<void>;
   discardAllVaultProposalFiles: () => Promise<void>;
   undoLastVaultEdit: () => void;
+  completeSystemContext: (documentId: string, systemMd: string) => void;
+  setSystemDesignScanFolder: (path: string | undefined) => void;
+  addSystemDesignReferencePath: (path: string) => void;
+  removeSystemDesignReferencePath: (path: string) => void;
 };
 
-const umlFiles: Record<string, string> = {
-  "diagrams/auth-flow.puml":
+const systemDesignFiles: Record<string, string> = {
+  "diagrams/context.puml":
     "@startuml\nactor User\nUser -> API: Authenticate\nAPI --> User: Token\n@enduml\n",
 };
 
@@ -379,16 +383,16 @@ const createConversation = (
   const now = new Date().toISOString();
   const timestamps = { createdAt: now, updatedAt: now };
 
-  if (options.kind === "uml") {
-    const active = "diagrams/auth-flow.puml";
+  if (options.kind === "system_design") {
+    const active = "diagrams/context.puml";
     const firstChatTabId = crypto.randomUUID();
     return {
       id: crypto.randomUUID(),
       title,
-      kind: "uml",
+      kind: "system_design",
       ...timestamps,
       templateId: null,
-      files: { ...umlFiles },
+      files: { ...systemDesignFiles },
       activeFile: active,
       openEditorTabs: [active],
       pendingPatch: null,
@@ -398,7 +402,8 @@ const createConversation = (
       activeChatTabId: firstChatTabId,
       chatMessages: [],
       loadedChatTabIds: [firstChatTabId],
-      savedSnapshot: { ...umlFiles },
+      savedSnapshot: { ...systemDesignFiles },
+      referencePaths: [],
     };
   }
 
@@ -533,8 +538,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => {
       const count = Object.keys(state.conversations).length + 1;
       const titleBase =
-        options.kind === "uml"
-          ? "UML Diagram"
+        options.kind === "system_design"
+          ? "System Design"
           : options.kind === "vault"
             ? options.vaultName?.trim() || "Knowledge Vault"
             : "Technical Document";
@@ -1783,6 +1788,74 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             files: nextFiles,
             savedSnapshot: nextSnapshot,
             lastAppliedVaultEdit: null,
+          },
+        },
+      };
+    }),
+
+  completeSystemContext: (documentId, systemMd) =>
+    set((state) => {
+      const current = state.conversations[documentId];
+      if (!current || current.kind !== "system_design") return {};
+      const content = systemMd.trim();
+      if (!content) return {};
+      const files = { ...current.files, "SYSTEM.md": content };
+      const savedSnapshot = { ...current.savedSnapshot, "SYSTEM.md": content };
+      return {
+        conversations: {
+          ...state.conversations,
+          [documentId]: {
+            ...current,
+            files,
+            savedSnapshot,
+            systemContextCompletedAt: nowIso(),
+          },
+        },
+      };
+    }),
+
+  setSystemDesignScanFolder: (path) =>
+    set((state) => {
+      const id = state.activeConversationId;
+      const current = state.conversations[id];
+      if (!current || current.kind !== "system_design") return {};
+      return {
+        conversations: {
+          ...state.conversations,
+          [id]: { ...current, scanFolderPath: path },
+        },
+      };
+    }),
+
+  addSystemDesignReferencePath: (path) =>
+    set((state) => {
+      const id = state.activeConversationId;
+      const current = state.conversations[id];
+      if (!current || current.kind !== "system_design") return {};
+      const trimmed = path.trim();
+      if (!trimmed) return {};
+      const existing = current.referencePaths ?? [];
+      if (existing.includes(trimmed)) return {};
+      return {
+        conversations: {
+          ...state.conversations,
+          [id]: { ...current, referencePaths: [...existing, trimmed] },
+        },
+      };
+    }),
+
+  removeSystemDesignReferencePath: (path) =>
+    set((state) => {
+      const id = state.activeConversationId;
+      const current = state.conversations[id];
+      if (!current || current.kind !== "system_design") return {};
+      const existing = current.referencePaths ?? [];
+      return {
+        conversations: {
+          ...state.conversations,
+          [id]: {
+            ...current,
+            referencePaths: existing.filter((p) => p !== path),
           },
         },
       };

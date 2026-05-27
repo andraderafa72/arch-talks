@@ -3,14 +3,14 @@ import { FileText, FolderOpen, GitBranch } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LatexHomePanel } from "@/pages/home/LatexHomePanel";
-import { UmlHomePanel } from "@/pages/home/UmlHomePanel";
+import { SystemDesignHomePanel } from "@/pages/home/SystemDesignHomePanel";
 import { VaultHomePanel } from "@/pages/home/VaultHomePanel";
 import { useTemplateDraftContext } from "@/contexts/TemplateDraftContext";
 import { requireVaultElectronApi } from "@/lib/electronBridge";
 import { useEditorStore } from "@/state/store";
 import type { VaultCategory } from "@/types";
 
-type CreateTab = "uml" | "latex" | "vault";
+type CreateTab = "system_design" | "latex" | "vault";
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -23,10 +23,10 @@ export function HomePage() {
     startTechnicalConversation,
   } = useTemplateDraftContext();
 
-  const [createTab, setCreateTab] = useState<CreateTab>("uml");
+  const [createTab, setCreateTab] = useState<CreateTab>("system_design");
 
-  const startUmlConversation = () => {
-    createConversation({ kind: "uml" });
+  const startSystemDesignConversation = () => {
+    createConversation({ kind: "system_design" });
     navigate("/workspace");
   };
 
@@ -83,11 +83,11 @@ export function HomePage() {
           >
             <TabsList className="grid h-auto w-full grid-cols-3 gap-1 bg-zinc-100 p-1 dark:bg-zinc-800">
               <TabsTrigger
-                value="uml"
+                value="system_design"
                 className="gap-1.5 data-[state=active]:bg-white data-[state=active]:text-zinc-900 dark:text-zinc-300 dark:data-[state=active]:bg-zinc-700 dark:data-[state=active]:text-zinc-50"
               >
                 <GitBranch className="h-4 w-4 shrink-0" aria-hidden />
-                UML
+                System design
               </TabsTrigger>
               <TabsTrigger
                 value="latex"
@@ -105,8 +105,8 @@ export function HomePage() {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="uml" className="mt-4 focus-visible:outline-none">
-              <UmlHomePanel onCreate={startUmlConversation} />
+            <TabsContent value="system_design" className="mt-4 focus-visible:outline-none">
+              <SystemDesignHomePanel onCreate={startSystemDesignConversation} />
             </TabsContent>
 
             <TabsContent value="latex" className="mt-4 focus-visible:outline-none">

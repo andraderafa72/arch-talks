@@ -1,41 +1,143 @@
 import type { DailyReportTaxonomy } from "./dailyReportTypes.ts";
+import { slugFromLabel, uniqueSlug } from "./dailyReportTypes.ts";
 
-export const DEFAULT_DAILY_REPORT_TAXONOMY: DailyReportTaxonomy = {
-  version: 1,
-  categories: [
-    { id: "absence", label: "Absence" },
-    { id: "administrative", label: "administrative" },
-    { id: "code-challenge-guideline", label: "code challenge guideline" },
-    { id: "development", label: "development" },
-    { id: "documentation", label: "documentation" },
-    { id: "hacker-rank", label: "Hacker rank" },
-    { id: "idle-time", label: "idle time" },
-    { id: "internal-process", label: "internal process" },
-    { id: "meetings-client", label: "meetings (client)" },
-    { id: "meetings-internal", label: "meetings (internal)" },
-    { id: "other", label: "other" },
-    { id: "technical-interview", label: "technical interview" },
-    { id: "testing", label: "testing" },
-    { id: "training-trainee", label: "training (trainee)" },
-    { id: "training-trainer", label: "training (trainer)" },
+const TAXONOMY_BY_CATEGORY: Record<string, readonly string[]> = {
+  Absence: ["National Holiday"],
+  Administrative: [
+    "Daily Progress Report",
+    "Email revision/answering",
+    "Management Cross-Company Process",
+    "Other - Administrative",
+    "Registering hours in time Tracker tools",
+    "weekly progress report",
   ],
-  taskTypes: [
-    { id: "absence-general", categoryId: "absence", label: "General" },
-    { id: "administrative-general", categoryId: "administrative", label: "General" },
-    { id: "code-challenge-guideline-general", categoryId: "code-challenge-guideline", label: "General" },
-    { id: "feature-work", categoryId: "development", label: "Feature work" },
-    { id: "bugfix", categoryId: "development", label: "Bug fix" },
-    { id: "code-review", categoryId: "development", label: "Code review" },
-    { id: "documentation-general", categoryId: "documentation", label: "General" },
-    { id: "hacker-rank-general", categoryId: "hacker-rank", label: "General" },
-    { id: "idle-time-general", categoryId: "idle-time", label: "General" },
-    { id: "internal-process-general", categoryId: "internal-process", label: "General" },
-    { id: "meetings-client-general", categoryId: "meetings-client", label: "General" },
-    { id: "meetings-internal-general", categoryId: "meetings-internal", label: "General" },
-    { id: "other-general", categoryId: "other", label: "General" },
-    { id: "technical-interview-general", categoryId: "technical-interview", label: "General" },
-    { id: "testing-general", categoryId: "testing", label: "General" },
-    { id: "training-trainee-general", categoryId: "training-trainee", label: "General" },
-    { id: "training-trainer-general", categoryId: "training-trainer", label: "General" },
+  "Code Challenge Guideline": [
+    "Applicant asked for a reschedule CC",
+    "Applicant didn't show up CC",
+    "BairesDev asked for a reschedule CC",
+    "CC completed",
+    "other CC",
+  ],
+  Development: [
+    "Architeture definition",
+    "Bug Fixing",
+    "Code review",
+    "Configuration",
+    "DB automation",
+    "DB Maintenance",
+    "Debug",
+    "Demo preparation",
+    "Design",
+    "environment setup",
+    "features development",
+    "graphiv design",
+    "integration",
+    "Library upgrade",
+    "Mockups design",
+    "Other - Development",
+    "Peer review",
+    "refactor",
+    "requirements analysis",
+    "Reseasrch / Analysis",
+    "Research and Learning",
+    "Rollback",
+    "Spike",
+    "Support",
+    "Test Cases development",
+    "UI Definition",
+    "Wireframes Design",
+    "Writing User Stories",
+  ],
+  Documentation: [
+    "Diagrams drawing",
+    "Documentation reading",
+    "documentation review",
+    "documentation writing",
+    "other - documentation",
+    "Research",
+    "technical writing",
+  ],
+  "Hacker Rank": [
+    "Applicant asked for a reschedule HR",
+    "Applicant didn't show up HR",
+    "BairesDev asked for a reschedule HR",
+    "HR completed",
+    "other HR",
+  ],
+  "Idle time": [
+    "Internet issues",
+    "no assigned tasks",
+    "other - Idle time",
+    "Partial assignment",
+    "project hasn't started",
+    "travel",
+  ],
+  "Internal process": [
+    "Coding Challenges review",
+    "Ohter - internal process",
+    "reviewing exams",
+    "staffing technical interview",
+    "technical screenings",
+  ],
+  Other: ["Other", "Other task category"],
+  "Technical interview": [
+    "Applicant asked for a reschedule TI",
+    "Applicant didn't show up TI",
+    "BairesDev asked for a reschedule TI",
+    "TI completed",
+    "other TI",
+  ],
+  Testing: [
+    "Coding",
+    "Environment Configuration",
+    "Exploratory",
+    "Functional testing",
+    "manual testing",
+    "other - testing",
+    "production verification",
+    "regression testing",
+    "smoke testing",
+    "test case execution",
+    "test creation/design",
+    "testathon / UAT",
+  ],
+  "Training (trainee)": [
+    "internal course",
+    "online course",
+    "other - training (trainee)",
+    "Project onboarding (trainee)",
+    "Reading documentation",
+    "receiving ambassador support",
+    "receiving mentoring suport",
+  ],
+  "Training (trainer)": [
+    "Other - training (trainer)",
+    "Providing ambassador support",
+    "Providing mentoring support",
+    "Project onboarding (trainer)",
   ],
 };
+
+function buildDefaultTaxonomy(): DailyReportTaxonomy {
+  const categories = Object.keys(TAXONOMY_BY_CATEGORY).map((label) => ({
+    id: slugFromLabel(label),
+    label,
+  }));
+
+  const usedTypeIds = new Set<string>();
+  const taskTypes: DailyReportTaxonomy["taskTypes"] = [];
+
+  for (const [categoryLabel, typeLabels] of Object.entries(TAXONOMY_BY_CATEGORY)) {
+    const categoryId = slugFromLabel(categoryLabel);
+    for (const label of typeLabels) {
+      const baseId = slugFromLabel(label);
+      const id = uniqueSlug(baseId, usedTypeIds);
+      usedTypeIds.add(id);
+      taskTypes.push({ id, categoryId, label });
+    }
+  }
+
+  return { version: 1, categories, taskTypes };
+}
+
+export const DEFAULT_DAILY_REPORT_TAXONOMY: DailyReportTaxonomy = buildDefaultTaxonomy();

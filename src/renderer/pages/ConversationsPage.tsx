@@ -5,7 +5,7 @@ import { useEditorStore } from "@/state/store";
 import type { ConversationKind } from "@/types";
 import { useSearchParams } from "react-router-dom";
 
-const KIND_FILTERS = new Set<ConversationKind>(["uml", "technical_document", "vault"]);
+const KIND_FILTERS = new Set<ConversationKind>(["system_design", "technical_document", "vault"]);
 
 function parseKindFilter(value: string | null): ConversationKind | undefined {
   if (value && KIND_FILTERS.has(value as ConversationKind)) {

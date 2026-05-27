@@ -2,6 +2,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ConversationsSidebar } from "@/components/chat/ConversationsSidebar";
 import { EditorPanel } from "@/components/editor/EditorPanel";
 import { PreviewPanel } from "@/components/preview/PreviewPanel";
+import { SystemContextOverlay } from "@/components/system-design/SystemContextOverlay";
 import { VaultCategoryGate } from "@/components/vault/VaultCategoryGate";
 import { VaultPlaygroundDrawer } from "@/components/vault/VaultPlaygroundDrawer";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
     currentFiles,
     hasUnsavedChanges,
     selectFile,
+    setPatch,
     addMessage,
     openConversationTab,
     closeConversationTab,
@@ -105,6 +107,22 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
     return <VaultCategoryGate documentId={activeConversationId} locale={locale} />;
   }
 
+  const needsSystemContext =
+    conversationKind === "system_design" &&
+    !Object.hasOwn(currentFiles, "SYSTEM.md");
+
+  if (needsSystemContext) {
+    return (
+      <SystemContextOverlay
+        documentId={activeConversationId}
+        locale={locale}
+        scanFolderPath={vaultConversation?.scanFolderPath}
+        aiSelection={activeChatAiSelection}
+        onAiSelectionChange={setActiveChatAiSelection}
+      />
+    );
+  }
+
   return (
     <div
       className="grid min-h-0 flex-1"
@@ -139,6 +157,7 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
           messages={chatMessages}
           files={currentFiles}
           activeFile={activeFile}
+          onPatchReceived={setPatch}
           onMessage={addMessage}
           conversationTabs={openConversationTabs}
           allConversationTabs={allConversationTabs}

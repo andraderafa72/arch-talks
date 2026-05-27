@@ -102,6 +102,63 @@ export type WorkspaceChatResponse = {
   patch?: MarkdownChatPatch;
 };
 
+export type SystemDesignContextChatRequest = {
+  sessionKey: string;
+  prompt: string;
+  aiSelection?: LocalAiSelection;
+  streamId?: string;
+  scanFolderPath?: string;
+};
+
+export type SystemDesignContextChatResponse = {
+  reply: string;
+};
+
+export type SystemDesignMaterializeRequest = {
+  sessionKey: string;
+  messages: { role: "user" | "assistant" | "system"; content: string }[];
+  aiSelection?: LocalAiSelection;
+  streamId?: string;
+  scanFolderPath?: string;
+};
+
+export type SystemDesignMaterializeResponse = {
+  systemMd: string;
+};
+
+export type SystemDesignChatRequest = {
+  sessionKey: string;
+  activeFile: string;
+  files: Record<string, string>;
+  systemMd: string;
+  prompt: string;
+  aiSelection?: LocalAiSelection;
+  streamId?: string;
+  scanFolderPath?: string;
+  referencePaths?: string[];
+};
+
+export type SystemDesignChatResponse = {
+  reply: string;
+  patch?: MarkdownChatPatch;
+};
+
+export type SystemDesignReferenceEntry = {
+  token: string;
+  label: string;
+  group: string;
+  isDirectory: boolean;
+};
+
+export type SystemDesignListReferenceEntriesRequest = {
+  referencePaths: string[];
+  query: string;
+};
+
+export type SystemDesignListReferenceEntriesResponse = {
+  entries: SystemDesignReferenceEntry[];
+};
+
 // ---------------------------------------------------------------------------
 // Vault ingestion
 // ---------------------------------------------------------------------------
@@ -334,6 +391,18 @@ export type ElectronApi = {
   markdownChatSend?: (req: MarkdownChatRequest) => Promise<MarkdownChatResponse>;
   umlChatSend?: (req: UmlChatRequest) => Promise<UmlChatResponse>;
   workspaceChatSend?: (req: WorkspaceChatRequest) => Promise<WorkspaceChatResponse>;
+  systemDesignContextChatSend?: (
+    req: SystemDesignContextChatRequest,
+  ) => Promise<SystemDesignContextChatResponse>;
+  systemDesignMaterializeSystemMd?: (
+    req: SystemDesignMaterializeRequest,
+  ) => Promise<SystemDesignMaterializeResponse>;
+  systemDesignChatSend?: (req: SystemDesignChatRequest) => Promise<SystemDesignChatResponse>;
+  systemDesignListReferenceEntries?: (
+    req: SystemDesignListReferenceEntriesRequest,
+  ) => Promise<SystemDesignListReferenceEntriesResponse>;
+  systemDesignGetChatFolderPath?: (documentId: string) => Promise<{ path: string }>;
+  pickDirectory?: () => Promise<{ ok: true; path: string } | { ok: false; canceled: true }>;
   vaultChatSend?: (req: VaultChatRequest) => Promise<VaultChatResponse>;
   vaultConsumptionChatSend?: (req: VaultConsumptionChatRequest) => Promise<VaultConsumptionChatResponse>;
   vaultApplyPlan?: (req: VaultApplyPlanRequest) => Promise<VaultApplyPlanResponse>;

@@ -95,10 +95,10 @@ export function TopBar() {
                 onSelect: () => navigate("/conversations?kind=technical_document"),
               },
               {
-                id: "workspace-uml",
-                label: t.umlWorkspaces,
-                description: t.umlWorkspacesDesc,
-                onSelect: () => navigate("/conversations?kind=uml"),
+                id: "workspace-system-design",
+                label: t.systemDesignWorkspaces,
+                description: t.systemDesignWorkspacesDesc,
+                onSelect: () => navigate("/conversations?kind=system_design"),
               },
               {
                 id: "workspace-vault",

@@ -10,6 +10,7 @@ import {
   type DailyReportDocument,
   type DailyReportMonthDayIndex,
   type DailyReportTaskEntry,
+  type DailyReportTimeLogEntry,
 } from "./dailyReportTypes.ts";
 
 const writeChains = new Map<string, Promise<void>>();
@@ -99,6 +100,25 @@ function parseChatTurn(raw: unknown): DailyReportChatTurn | undefined {
   return { id, role, content, timestamp };
 }
 
+function parseTimeLogEntry(raw: unknown): DailyReportTimeLogEntry | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const row = raw as Record<string, unknown>;
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const description = typeof row.description === "string" ? row.description.trim() : "";
+  const startedAt = typeof row.startedAt === "string" ? row.startedAt : "";
+  const endedAt = typeof row.endedAt === "string" ? row.endedAt : "";
+  const hours = typeof row.hours === "number" && Number.isFinite(row.hours) ? row.hours : NaN;
+  if (!id || !description || !startedAt || !endedAt || !(hours > 0)) return undefined;
+  const entry: DailyReportTimeLogEntry = { id, description, startedAt, endedAt, hours };
+  const categoryId = typeof row.categoryId === "string" ? row.categoryId.trim() : "";
+  const taskTypeId = typeof row.taskTypeId === "string" ? row.taskTypeId.trim() : "";
+  if (categoryId) entry.categoryId = categoryId;
+  if (taskTypeId) entry.taskTypeId = taskTypeId;
+  const summaryEntryId = typeof row.summaryEntryId === "string" ? row.summaryEntryId.trim() : "";
+  if (summaryEntryId) entry.summaryEntryId = summaryEntryId;
+  return entry;
+}
+
 function parseTaskEntry(raw: unknown): DailyReportTaskEntry | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const row = raw as Record<string, unknown>;
@@ -160,6 +180,14 @@ export function parseDailyReportDocument(raw: unknown, expectedDate?: string): D
       ? activeChatTabIdRaw
       : undefined;
 
+  const timeLogs: DailyReportTimeLogEntry[] = [];
+  if (Array.isArray(obj.timeLogs)) {
+    for (const item of obj.timeLogs) {
+      const parsed = parseTimeLogEntry(item);
+      if (parsed) timeLogs.push(parsed);
+    }
+  }
+
   return {
     version: 1,
     date,
@@ -167,6 +195,7 @@ export function parseDailyReportDocument(raw: unknown, expectedDate?: string): D
     narrative,
     taskBlockPlan: taskBlockPlan.length > 0 ? taskBlockPlan : undefined,
     chatTabs,
+    timeLogs: timeLogs.length > 0 ? timeLogs : undefined,
     activeChatTabId,
     createdAt,
     updatedAt,

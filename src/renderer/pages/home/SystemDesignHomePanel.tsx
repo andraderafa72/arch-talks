@@ -9,19 +9,19 @@ function TabPanelIntro({ title, description }: { title: string; description: str
   );
 }
 
-type UmlHomePanelProps = {
+type SystemDesignHomePanelProps = {
   onCreate: () => void;
 };
 
-export function UmlHomePanel({ onCreate }: UmlHomePanelProps) {
+export function SystemDesignHomePanel({ onCreate }: SystemDesignHomePanelProps) {
   return (
     <div className="space-y-4">
       <TabPanelIntro
-        title="UML diagram project"
-        description="Start a workspace with a default PlantUML file (diagrams/auth-flow.puml). Edit the diagram, preview renders, and chat with the assistant."
+        title="System design project"
+        description="Start a workspace to capture system context in SYSTEM.md and build PlantUML diagrams aligned with your architecture."
       />
       <Button className="w-full" onClick={onCreate}>
-        Create UML project
+        Create system design project
       </Button>
     </div>
   );

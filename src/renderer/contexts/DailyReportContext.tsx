@@ -9,9 +9,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  activeTrackerElapsedMs,
+  elapsedMsToHours,
+  msToHours,
+  roundUpToQuarterHours,
+} from "@/lib/dailyReportTime";
 import { isAbortError, stoppedAssistantContent } from "@/lib/localAiErrors";
+import { userPreferencesService } from "@/persistence/services/userPreferencesService";
 import { useEditorStore } from "@/state/store";
 import type {
+  DailyReportActiveTimeTracker,
   DailyReportBlockSpec,
   DailyReportChatTab,
   DailyReportChatTurn,
@@ -21,6 +29,7 @@ import type {
   DailyReportSummary,
   DailyReportTaskEntry,
   DailyReportTaxonomy,
+  DailyReportTimeLogEntry,
 } from "@/types/daily-report";
 import { todayIsoDate } from "@/types/daily-report";
 import type { LocalAiSelection } from "@/types/electron-api";
@@ -100,6 +109,43 @@ type DailyReportContextValue = {
   saveTaxonomy: (taxonomy: DailyReportTaxonomy) => Promise<void>;
   pickStorageRoot: () => Promise<void>;
   resetStorageRoot: () => Promise<void>;
+  activeTimeTracker: DailyReportActiveTimeTracker | null;
+  isTrackerPaused: boolean;
+  elapsedMs: number;
+  timeLogs: DailyReportTimeLogEntry[];
+  startTimeTracker: (
+    description: string,
+    categoryId?: string,
+    taskTypeId?: string,
+  ) => Promise<void>;
+  updateActiveTimeTracker: (patch: {
+    description?: string;
+    categoryId?: string;
+    taskTypeId?: string;
+  }) => Promise<void>;
+  pauseTimeTracker: () => Promise<void>;
+  resumeTimeTracker: () => Promise<void>;
+  restartTimeTracker: () => Promise<void>;
+  setActiveTimeTrackerElapsed: (elapsedMs: number) => Promise<void>;
+  stopTimeTracker: (params: {
+    description: string;
+    categoryId?: string;
+    taskTypeId?: string;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  addTimeLogToSummary: (
+    logId: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  updateTimeLog: (
+    logId: string,
+    patch: {
+      description?: string;
+      startedAt?: string;
+      endedAt?: string;
+      categoryId?: string;
+      taskTypeId?: string;
+    },
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  deleteTimeLog: (logId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 const DailyReportContext = createContext<DailyReportContextValue | null>(null);
@@ -112,6 +158,102 @@ function summaryToEntries(summary: DailyReportSummary): DailyReportTaskEntry[] {
     categoryId: e.categoryId,
     taskTypeId: e.taskTypeId,
   }));
+}
+
+function defaultCategoryAndType(taxonomy: DailyReportTaxonomy | null): {
+  categoryId: string;
+  taskTypeId: string;
+} {
+  const categoryId = taxonomy?.categories[0]?.id ?? "";
+  const taskTypeId = taxonomy?.taskTypes.find((t) => t.categoryId === categoryId)?.id ?? "";
+  return { categoryId, taskTypeId };
+}
+
+function isCategoryTypePairValid(categoryId?: string, taskTypeId?: string): boolean {
+  const hasCat = Boolean(categoryId?.trim());
+  const hasType = Boolean(taskTypeId?.trim());
+  return (!hasCat && !hasType) || (hasCat && hasType);
+}
+
+function resolveCategoryAndType(
+  taxonomy: DailyReportTaxonomy | null,
+  categoryId?: string,
+  taskTypeId?: string,
+): { categoryId: string; taskTypeId: string } | { error: string } {
+  const cat = categoryId?.trim() ?? "";
+  const type = taskTypeId?.trim() ?? "";
+  if (!isCategoryTypePairValid(cat || undefined, type || undefined)) {
+    return { error: "Select both category and task type, or leave both empty." };
+  }
+  if (!cat && !type) return defaultCategoryAndType(taxonomy);
+  const typeValid = taxonomy?.taskTypes.some((t) => t.id === type && t.categoryId === cat);
+  if (!typeValid) return { error: "Invalid category or task type." };
+  return { categoryId: cat, taskTypeId: type };
+}
+
+function appendTimeLogToDocument(
+  doc: DailyReportDocument,
+  session: {
+    description: string;
+    startedAt: string;
+    endedAt: string;
+    hours: number;
+    categoryId?: string;
+    taskTypeId?: string;
+  },
+): DailyReportDocument {
+  const log: DailyReportTimeLogEntry = {
+    id: crypto.randomUUID(),
+    description: session.description,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    hours: session.hours,
+  };
+  if (session.categoryId) log.categoryId = session.categoryId;
+  if (session.taskTypeId) log.taskTypeId = session.taskTypeId;
+  return {
+    ...doc,
+    timeLogs: [...(doc.timeLogs ?? []), log],
+  };
+}
+
+function applyAddTimeLogToSummary(
+  doc: DailyReportDocument,
+  logId: string,
+  taxonomy: DailyReportTaxonomy | null,
+): { doc: DailyReportDocument } | { error: string } {
+  const logs = doc.timeLogs ?? [];
+  const index = logs.findIndex((log) => log.id === logId);
+  if (index < 0) return { error: "Time log not found" };
+  const log = logs[index]!;
+  if (log.summaryEntryId) return { error: "Already in summary" };
+
+  const resolved = resolveCategoryAndType(taxonomy, log.categoryId, log.taskTypeId);
+  if ("error" in resolved) return { error: resolved.error };
+
+  const summaryEntryId = crypto.randomUUID();
+  const entry: DailyReportTaskEntry = {
+    id: summaryEntryId,
+    hours: roundUpToQuarterHours(log.hours),
+    description: log.description,
+    categoryId: resolved.categoryId,
+    taskTypeId: resolved.taskTypeId,
+  };
+  const updatedLog: DailyReportTimeLogEntry = {
+    ...log,
+    categoryId: resolved.categoryId,
+    taskTypeId: resolved.taskTypeId,
+    summaryEntryId,
+  };
+  const nextLogs = [...logs];
+  nextLogs[index] = updatedLog;
+  return {
+    doc: {
+      ...doc,
+      entries: [...doc.entries, entry],
+      timeLogs: nextLogs,
+    },
+  };
 }
 
 type DailyReportProviderProps = {
@@ -141,7 +283,12 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
   const [view, setView] = useState<"report" | "settings">("report");
   const [isBlockPlanValid, setBlockPlanValid] = useState(true);
   const [activeChatTabId, setActiveChatTabIdState] = useState("");
+  const [activeTimeTracker, setActiveTimeTracker] = useState<DailyReportActiveTimeTracker | null>(
+    null,
+  );
+  const [timerTick, setTimerTick] = useState(0);
   const documentRef = useRef<DailyReportDocument | null>(null);
+  const activeTimeTrackerRef = useRef<DailyReportActiveTimeTracker | null>(null);
   const savedSnapshotRef = useRef("");
   const activeChatTabIdRef = useRef("");
   const isLoadingRef = useRef(isLoading);
@@ -152,6 +299,37 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
   activeChatTabIdRef.current = activeChatTabId;
   isLoadingRef.current = isLoading;
   isSendingRef.current = isSending;
+  activeTimeTrackerRef.current = activeTimeTracker;
+
+  const persistActiveTimeTracker = useCallback(async (tracker: DailyReportActiveTimeTracker | null) => {
+    const cached = userPreferencesService.getCached();
+    await userPreferencesService.patch({
+      dailyReports: {
+        ...cached.dailyReports,
+        activeTimeTracker: tracker,
+      },
+    });
+    setActiveTimeTracker(tracker);
+  }, []);
+
+  const isTrackerPaused = Boolean(activeTimeTracker?.paused);
+
+  const elapsedMs = useMemo(() => {
+    if (!activeTimeTracker) return 0;
+    void timerTick;
+    return activeTrackerElapsedMs(activeTimeTracker);
+  }, [activeTimeTracker, timerTick]);
+
+  const timeLogs = useMemo(() => {
+    const logs = document?.timeLogs ?? [];
+    return [...logs].sort((a, b) => b.endedAt.localeCompare(a.endedAt));
+  }, [document?.timeLogs]);
+
+  useEffect(() => {
+    if (!activeTimeTracker || activeTimeTracker.paused) return;
+    const id = window.setInterval(() => setTimerTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [activeTimeTracker?.startedAt, activeTimeTracker?.paused]);
 
   const setActiveChatTabId = useCallback((tabId: string) => {
     setActiveChatTabIdState(tabId);
@@ -275,6 +453,10 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
           setStorageInfo(await api.dailyReportGetStorageRoot());
         }
         await reloadTaxonomy();
+        userPreferencesService.enablePersist();
+        const prefs = await userPreferencesService.load();
+        const tracker = prefs.dailyReports?.activeTimeTracker ?? null;
+        setActiveTimeTracker(tracker ?? null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to initialize");
       }
@@ -372,6 +554,249 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
       };
     });
   }, [activeChatTabId]);
+
+  const startTimeTracker = useCallback(
+    async (description: string, categoryId?: string, taskTypeId?: string) => {
+      if (activeTimeTrackerRef.current) return;
+      const trimmed = description.trim();
+      if (!trimmed) return;
+      if (!isCategoryTypePairValid(categoryId, taskTypeId)) return;
+      const now = new Date().toISOString();
+      const tracker: DailyReportActiveTimeTracker = {
+        date: selectedDate,
+        startedAt: now,
+        description: trimmed,
+        accumulatedMs: 0,
+        paused: false,
+      };
+      if (categoryId?.trim()) tracker.categoryId = categoryId.trim();
+      if (taskTypeId?.trim()) tracker.taskTypeId = taskTypeId.trim();
+      await persistActiveTimeTracker(tracker);
+    },
+    [persistActiveTimeTracker, selectedDate],
+  );
+
+  const updateActiveTimeTracker = useCallback(
+    async (patch: { description?: string; categoryId?: string; taskTypeId?: string }) => {
+      const current = activeTimeTrackerRef.current;
+      if (!current) return;
+      const next: DailyReportActiveTimeTracker = { ...current };
+      if (patch.description !== undefined) next.description = patch.description;
+      if (patch.categoryId !== undefined) {
+        if (patch.categoryId) next.categoryId = patch.categoryId;
+        else delete next.categoryId;
+      }
+      if (patch.taskTypeId !== undefined) {
+        if (patch.taskTypeId) next.taskTypeId = patch.taskTypeId;
+        else delete next.taskTypeId;
+      }
+      if (!isCategoryTypePairValid(next.categoryId, next.taskTypeId)) return;
+      await persistActiveTimeTracker(next);
+    },
+    [persistActiveTimeTracker],
+  );
+
+  const stopTimeTracker = useCallback(
+    async (params: {
+      description: string;
+      categoryId?: string;
+      taskTypeId?: string;
+    }): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const tracker = activeTimeTrackerRef.current;
+      if (!tracker) return { ok: false, error: "No active timer" };
+
+      const resolved = resolveCategoryAndType(
+        taxonomy,
+        params.categoryId ?? tracker.categoryId,
+        params.taskTypeId ?? tracker.taskTypeId,
+      );
+      if ("error" in resolved) return { ok: false, error: resolved.error };
+
+      const description = params.description.trim() || tracker.description.trim();
+      if (!description) return { ok: false, error: "Description is required" };
+
+      const endedAt = new Date().toISOString();
+      const hours = msToHours(activeTrackerElapsedMs(tracker, Date.parse(endedAt)));
+      const session = {
+        description,
+        startedAt: tracker.startedAt,
+        endedAt,
+        hours,
+        categoryId: resolved.categoryId,
+        taskTypeId: resolved.taskTypeId,
+      };
+
+      await persistActiveTimeTracker(null);
+
+      const api = resolveElectronApi();
+      if (!api?.dailyReportLoad || !api.dailyReportSave) {
+        return { ok: false, error: "Electron API unavailable" };
+      }
+
+      try {
+        if (tracker.date === selectedDate && documentRef.current?.date === selectedDate) {
+          setDocument((prev) => (prev ? appendTimeLogToDocument(prev, session) : prev));
+        } else {
+          const loaded = await api.dailyReportLoad(tracker.date);
+          const updated = appendTimeLogToDocument(loaded, session);
+          await api.dailyReportSave(updated);
+          if (tracker.date === selectedDate) {
+            setDocument(updated);
+            setSavedSnapshot(JSON.stringify(updated));
+          }
+          await refreshMonthIndex();
+        }
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to save session" };
+      }
+    },
+    [persistActiveTimeTracker, refreshMonthIndex, selectedDate, taxonomy],
+  );
+
+  const addTimeLogToSummary = useCallback(
+    async (logId: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const doc = documentRef.current;
+      if (!doc) return { ok: false, error: "No document loaded" };
+      const result = applyAddTimeLogToSummary(doc, logId, taxonomy);
+      if ("error" in result) return { ok: false, error: result.error };
+      setDocument(result.doc);
+      return { ok: true };
+    },
+    [taxonomy],
+  );
+
+  const pauseTimeTracker = useCallback(async () => {
+    const current = activeTimeTrackerRef.current;
+    if (!current || current.paused) return;
+    const now = Date.now();
+    await persistActiveTimeTracker({
+      ...current,
+      paused: true,
+      accumulatedMs: activeTrackerElapsedMs(current, now),
+    });
+  }, [persistActiveTimeTracker]);
+
+  const resumeTimeTracker = useCallback(async () => {
+    const current = activeTimeTrackerRef.current;
+    if (!current || !current.paused) return;
+    await persistActiveTimeTracker({
+      ...current,
+      paused: false,
+      startedAt: new Date().toISOString(),
+    });
+  }, [persistActiveTimeTracker]);
+
+  const restartTimeTracker = useCallback(async () => {
+    const current = activeTimeTrackerRef.current;
+    if (!current) return;
+    const now = new Date().toISOString();
+    await persistActiveTimeTracker({
+      ...current,
+      paused: false,
+      accumulatedMs: 0,
+      startedAt: now,
+    });
+  }, [persistActiveTimeTracker]);
+
+  const setActiveTimeTrackerElapsed = useCallback(
+    async (ms: number) => {
+      const current = activeTimeTrackerRef.current;
+      if (!current) return;
+      await persistActiveTimeTracker({
+        ...current,
+        paused: true,
+        accumulatedMs: Math.max(0, ms),
+        startedAt: new Date().toISOString(),
+      });
+    },
+    [persistActiveTimeTracker],
+  );
+
+  const updateTimeLog = useCallback(
+    async (
+      logId: string,
+      patch: {
+        description?: string;
+        startedAt?: string;
+        endedAt?: string;
+        categoryId?: string;
+        taskTypeId?: string;
+      },
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      setDocument((prev) => {
+        if (!prev) return prev;
+        const logs = prev.timeLogs ?? [];
+        const index = logs.findIndex((log) => log.id === logId);
+        if (index < 0) return prev;
+
+        const existing = logs[index]!;
+        const startedAt = patch.startedAt ?? existing.startedAt;
+        const endedAt = patch.endedAt ?? existing.endedAt;
+        const hours = elapsedMsToHours(startedAt, endedAt);
+        const description =
+          patch.description !== undefined ? patch.description.trim() : existing.description;
+        if (!description) return prev;
+
+        const categoryId =
+          patch.categoryId !== undefined ? patch.categoryId || undefined : existing.categoryId;
+        const taskTypeId =
+          patch.taskTypeId !== undefined ? patch.taskTypeId || undefined : existing.taskTypeId;
+
+        const updatedLog: DailyReportTimeLogEntry = {
+          ...existing,
+          description,
+          startedAt,
+          endedAt,
+          hours,
+          categoryId,
+          taskTypeId,
+        };
+        const nextLogs = [...logs];
+        nextLogs[index] = updatedLog;
+
+        let entries = prev.entries;
+        if (existing.summaryEntryId) {
+          const summaryHours = roundUpToQuarterHours(hours);
+          entries = entries.map((entry) =>
+            entry.id === existing.summaryEntryId
+              ? {
+                  ...entry,
+                  hours: summaryHours,
+                  description,
+                  categoryId: categoryId ?? entry.categoryId,
+                  taskTypeId: taskTypeId ?? entry.taskTypeId,
+                }
+              : entry,
+          );
+        }
+
+        return { ...prev, timeLogs: nextLogs, entries };
+      });
+      return { ok: true };
+    },
+    [],
+  );
+
+  const deleteTimeLog = useCallback(
+    async (logId: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+      setDocument((prev) => {
+        if (!prev) return prev;
+        const logs = prev.timeLogs ?? [];
+        const target = logs.find((log) => log.id === logId);
+        if (!target) return prev;
+        return {
+          ...prev,
+          timeLogs: logs.filter((log) => log.id !== logId),
+          entries: target.summaryEntryId
+            ? prev.entries.filter((entry) => entry.id !== target.summaryEntryId)
+            : prev.entries,
+        };
+      });
+      return { ok: true };
+    },
+    [],
+  );
 
   const appendChatTurn = useCallback(
     (turn: DailyReportChatTurn) => {
@@ -610,6 +1035,20 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
       saveTaxonomy,
       pickStorageRoot,
       resetStorageRoot,
+      activeTimeTracker,
+      isTrackerPaused,
+      elapsedMs,
+      timeLogs,
+      startTimeTracker,
+      updateActiveTimeTracker,
+      pauseTimeTracker,
+      resumeTimeTracker,
+      restartTimeTracker,
+      setActiveTimeTrackerElapsed,
+      stopTimeTracker,
+      addTimeLogToSummary,
+      updateTimeLog,
+      deleteTimeLog,
     }),
     [
       selectedDate,
@@ -649,6 +1088,20 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
       saveTaxonomy,
       pickStorageRoot,
       resetStorageRoot,
+      activeTimeTracker,
+      isTrackerPaused,
+      elapsedMs,
+      timeLogs,
+      startTimeTracker,
+      updateActiveTimeTracker,
+      pauseTimeTracker,
+      resumeTimeTracker,
+      restartTimeTracker,
+      setActiveTimeTrackerElapsed,
+      stopTimeTracker,
+      addTimeLogToSummary,
+      updateTimeLog,
+      deleteTimeLog,
     ],
   );
 

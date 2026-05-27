@@ -1,5 +1,25 @@
 /** Mirrors main-process IPC contracts (keep in sync with electron/latex/types.ts). */
 
+import type { IntegrationId } from "../../../shared/integrations.ts";
+
+export type { IntegrationId };
+
+export type IntegrationHealthResult = {
+  id: IntegrationId;
+  ok: boolean;
+  error?: string;
+};
+
+export type IntegrationCheckResponse =
+  | { ok: true; results: IntegrationHealthResult[] }
+  | { ok: false; error: string };
+
+export type IntegrationRunStartResponse = {
+  ok: boolean;
+  error?: string;
+  pid?: number;
+};
+
 // ---------------------------------------------------------------------------
 // Local AI selection
 // ---------------------------------------------------------------------------
@@ -349,6 +369,31 @@ export type ElectronApi = {
     sampleRate: number;
     locale: "en" | "pt";
   }) => Promise<{ text: string }>;
+  integrationsCheck?: (payload?: IntegrationId | "all") => Promise<IntegrationCheckResponse>;
+  integrationsRunStart?: (id: IntegrationId) => Promise<IntegrationRunStartResponse>;
+  dailyReportLoadTaxonomy?: () => Promise<import("./daily-report").DailyReportTaxonomy>;
+  dailyReportSaveTaxonomy?: (
+    taxonomy: import("./daily-report").DailyReportTaxonomy,
+  ) => Promise<{ ok: true }>;
+  dailyReportGetStorageRoot?: () => Promise<import("./daily-report").DailyReportStorageRootInfo>;
+  dailyReportSetStorageRoot?: (
+    storageRootPath: string | null,
+  ) => Promise<import("./daily-report").DailyReportStorageRootInfo>;
+  dailyReportPickStorageRoot?: () => Promise<
+    | ({ ok: true } & import("./daily-report").DailyReportStorageRootInfo)
+    | { ok: false; canceled: true }
+  >;
+  dailyReportListMonth?: (
+    year: number,
+    month: number,
+  ) => Promise<import("./daily-report").DailyReportMonthDayIndex[]>;
+  dailyReportLoad?: (date: string) => Promise<import("./daily-report").DailyReportDocument>;
+  dailyReportSave?: (
+    document: import("./daily-report").DailyReportDocument,
+  ) => Promise<{ ok: true }>;
+  dailyReportChatSend?: (
+    req: import("./daily-report").DailyReportChatRequest,
+  ) => Promise<import("./daily-report").DailyReportChatResponse>;
 };
 
 declare global {

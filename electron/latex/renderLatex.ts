@@ -1,10 +1,9 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { app } from "electron";
 import type { LatexRenderRequest, LatexRenderResult } from "./types.ts";
 import { LatexPdfCache } from "./latexCache.ts";
-import { resolveTectonicBinary } from "./tectonicPath.ts";
+import { expectedPdfPath, runTectonicInDocker } from "./runTectonicDocker.ts";
 import { sanitizeLatexFiles } from "./sanitizeInput.ts";
 import { validateLatex } from "./validateLatex.ts";
 
@@ -26,7 +25,12 @@ function truncateStderr(s: string): string {
   return `${s.slice(0, STDERR_CAP)}…`;
 }
 
-function normalizePayload(req: LatexRenderRequest): { mainFile: string; files: Record<string, string>; format: "pdf" | "svg"; timeoutMs: number } {
+function normalizePayload(req: LatexRenderRequest): {
+  mainFile: string;
+  files: Record<string, string>;
+  format: "pdf" | "svg";
+  timeoutMs: number;
+} {
   let files = req.files ?? {};
   if (typeof req.content === "string" && req.content.length > 0 && Object.keys(files).length === 0) {
     files = { "main.tex": req.content };
@@ -35,65 +39,6 @@ function normalizePayload(req: LatexRenderRequest): { mainFile: string; files: R
   const format = req.format ?? "pdf";
   const timeoutMs = Math.min(Math.max(req.timeoutMs ?? 10_000, 3000), 120_000);
   return { mainFile, files, format, timeoutMs };
-}
-
-/** Tectonic 0.16+ resolves bare `main.tex` incorrectly; require an explicit relative path. */
-function tectonicInputArg(mainRelative: string): string {
-  const posix = mainRelative.replace(/\\/g, "/");
-  return posix.startsWith("./") ? posix : `./${posix}`;
-}
-
-function expectedPdfPath(jobDir: string, mainRelative: string): string {
-  const pdfRel = mainRelative.replace(/\\/g, "/").replace(/\.tex$/i, ".pdf");
-  return path.join(jobDir, pdfRel);
-}
-
-function runTectonic(
-  binary: string,
-  jobDir: string,
-  mainRelative: string,
-  timeoutMs: number,
-): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
-  return new Promise((resolvePromise) => {
-    const args = ["--untrusted", tectonicInputArg(mainRelative)];
-    const child = spawn(binary, args, {
-      cwd: jobDir,
-      env: {
-        ...process.env,
-        TECTONIC_UNTRUSTED_MODE: "1",
-        TECTONIC_CACHE_DIR: path.join(jobDir, ".tectonic-cache"),
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    child.stdout?.setEncoding("utf8");
-    child.stderr?.setEncoding("utf8");
-    child.stdout?.on("data", (c: string) => {
-      stdout += c;
-    });
-    child.stderr?.on("data", (c: string) => {
-      stderr += c;
-    });
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        /* ignore */
-      }
-    }, timeoutMs);
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolvePromise({ code, stdout, stderr, timedOut });
-    });
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      stderr += `\n${err.message}`;
-      resolvePromise({ code: -1, stdout, stderr, timedOut: false });
-    });
-  });
 }
 
 export async function renderLatex(raw: unknown): Promise<LatexRenderResult> {
@@ -106,7 +51,7 @@ export async function renderLatex(raw: unknown): Promise<LatexRenderResult> {
   if (format === "svg") {
     return {
       success: false,
-      error: "SVG output requires a separate PDF-to-SVG converter (not bundled). Use format \"pdf\".",
+      error: 'SVG output requires a separate PDF-to-SVG converter (not bundled). Use format "pdf".',
       code: "UNSUPPORTED",
     };
   }
@@ -119,16 +64,6 @@ export async function renderLatex(raw: unknown): Promise<LatexRenderResult> {
   const validated = validateLatex(sanitized.files, mainFile);
   if (!validated.ok) {
     return { success: false, error: validated.error, code: "VALIDATION" };
-  }
-
-  const binary = resolveTectonicBinary();
-  if (!binary) {
-    return {
-      success: false,
-      error:
-        "Tectonic binary not found. Run `npm run download:tectonic` or set TECTONIC_PATH to a local executable.",
-      code: "IO",
-    };
   }
 
   const cache = getCache();
@@ -145,7 +80,7 @@ export async function renderLatex(raw: unknown): Promise<LatexRenderResult> {
       await fs.writeFile(abs, body, "utf8");
     }
 
-    const { code, stdout, stderr, timedOut } = await runTectonic(binary, jobDir, mainFile, timeoutMs);
+    const { code, stdout, stderr, timedOut } = await runTectonicInDocker(jobDir, mainFile, timeoutMs);
     if (timedOut || code === 137 || code === null) {
       return {
         success: false,

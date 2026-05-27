@@ -1,9 +1,12 @@
 import { useCallback } from "react";
+import { IntegrationSetupLink } from "@/components/configuration/IntegrationSetupLink";
 import { MarkdownMath } from "@/components/markdown/MarkdownMath";
 import { UmlDiagramPreview } from "@/components/preview/UmlDiagramPreview";
 import { VaultPlaygroundOpenButton } from "@/components/vault/VaultPlaygroundDrawer";
 import { Button } from "@/components/ui/button";
+import { useIntegrationConfigured } from "@/hooks/useIntegrationConfigured";
 import { usePlantUmlPreview } from "@/hooks/usePlantUmlPreview";
+import { integrationsStrings } from "@/lib/uiCopy";
 import { getUmlPreviewZoom } from "@/lib/umlPreviewZoom";
 import { useEditorStore } from "@/state/store";
 
@@ -29,8 +32,16 @@ export function PreviewPanel({
   onSaveRenderedPng,
   showVaultPlayground = false,
 }: PreviewPanelProps) {
+  const locale = useEditorStore((state) => state.locale);
+  const conversationKind = useEditorStore(
+    (state) => state.conversations[state.activeConversationId]?.kind,
+  );
   const isUmlFile = activeFile.endsWith(".puml");
+  const isTexFile = activeFile.endsWith(".tex");
   const isMarkdownPreview = isMarkdownFilename(activeFile);
+  const krokiConfigured = useIntegrationConfigured("kroki");
+  const tectonicConfigured = useIntegrationConfigured("tectonic");
+  const intl = integrationsStrings(locale);
   const { previewUrl, lastBlob, loading, error } = usePlantUmlPreview(documentContent, { enabled: isUmlFile });
   const umlPreviewZoom = useEditorStore((state) => {
     const conversation = state.conversations[state.activeConversationId];
@@ -71,7 +82,16 @@ export function PreviewPanel({
           <div className="flex h-full min-h-0 flex-col gap-2 rounded-md border border-zinc-200 p-2 dark:border-zinc-700">
             <div className="text-xs font-medium text-zinc-600 dark:text-zinc-300">{activeFile}</div>
             <div className="flex min-h-0 flex-1 flex-col">
-              {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+              {error ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                  {krokiConfigured === false ? (
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      {intl.krokiHint} <IntegrationSetupLink locale={locale} />
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               {!error && documentContent.trim() && loading ? (
                 <p className="text-sm text-zinc-600 dark:text-zinc-400">Rendering…</p>
               ) : null}
@@ -95,6 +115,13 @@ export function PreviewPanel({
         ) : (
           <div className="flex h-full min-h-0 flex-col gap-2 rounded-md border border-zinc-200 p-2 text-sm dark:border-zinc-700">
             <div className="text-xs font-medium text-zinc-600 dark:text-zinc-300">{activeFile}</div>
+            {isTexFile &&
+            conversationKind === "technical_document" &&
+            tectonicConfigured === false ? (
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                {intl.tectonicHint} <IntegrationSetupLink locale={locale} />
+              </p>
+            ) : null}
             <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-zinc-900 dark:text-zinc-100">
               {documentContent || ""}
             </pre>

@@ -9,12 +9,14 @@ import { useArchitectureBootstrap } from "@/hooks/useArchitectureBootstrap";
 import { useUserPreferencesSync } from "@/hooks/useUserPreferencesSync";
 import { ConversationsPage } from "@/pages/ConversationsPage";
 import { HomePage } from "@/pages/HomePage";
+import { IntegrationsPage } from "@/pages/IntegrationsPage";
 import { LatexTectonicPage } from "@/pages/LatexTectonicPage";
 import { MarkdownToPdfPage } from "@/pages/MarkdownToPdfPage";
 import { TemplatesPage } from "@/pages/TemplatesPage";
 import { ThemesPage } from "@/pages/ThemesPage";
 import { UmlRenderPage } from "@/pages/UmlRenderPage";
 import { VaultSkillsPage } from "@/pages/VaultSkillsPage";
+import { DailyReportsPage } from "@/pages/DailyReportsPage";
 import { WorkspacePage } from "@/pages/WorkspacePage";
 import { useEditorStore } from "@/state/store";
 
@@ -37,11 +39,13 @@ function AppContent({ theme }: AppContentProps) {
           <Route path="/workspace" element={<WorkspacePage theme={theme} onGoHome={() => navigate("/")} />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/themes" element={<ThemesPage />} />
+          <Route path="/configuration/integrations" element={<IntegrationsPage />} />
           <Route path="/conversations" element={<ConversationsPage />} />
           <Route path="/skills/vaults" element={<VaultSkillsPage />} />
           <Route path="/tools/markdown-pdf" element={<MarkdownToPdfPage theme={theme} />} />
           <Route path="/tools/uml-render" element={<UmlRenderPage theme={theme} />} />
           <Route path="/tools/latex-tectonic" element={<LatexTectonicPage theme={theme} />} />
+          <Route path="/daily-reports" element={<DailyReportsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

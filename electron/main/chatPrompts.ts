@@ -1,3 +1,6 @@
+import { formatBlockPlanForPrompt } from "../daily-report/dailyReportBlockPlan.ts";
+import type { DailyReportBlockSpec, DailyReportTaxonomy } from "../daily-report/dailyReportTypes.ts";
+
 const PATCH_YAML_INSTRUCTIONS = (activeFile: string) => `When you want to propose edits to a file, include a YAML code block with the following structure:
 
 \`\`\`yaml
@@ -372,4 +375,77 @@ ${fileBodies || "(no readable notes)"}
 - Prefer markdown lists with **bold paths** for search results, per the skill format.
 - Do not emit ingestion YAML, vault plans, or file patches — plain conversational markdown only.
 - Keep answers focused and cite the most relevant notes.`;
+}
+
+export function buildDailyReportSystemPrompt(options: {
+  date: string;
+  taxonomy: DailyReportTaxonomy;
+  taskBlockPlan?: DailyReportBlockSpec[];
+}): string {
+  const categoriesJson = JSON.stringify(
+    options.taxonomy.categories.map((c) => ({
+      id: c.id,
+      label: c.label,
+      description: c.description ?? null,
+    })),
+    null,
+    2,
+  );
+  const taskTypesJson = JSON.stringify(
+    options.taxonomy.taskTypes.map((t) => ({
+      id: t.id,
+      category_id: t.categoryId,
+      label: t.label,
+      description: t.description ?? null,
+    })),
+    null,
+    2,
+  );
+
+  const blockPlanSection = formatBlockPlanForPrompt(options.taskBlockPlan ?? []);
+  const hasBlockPlan = blockPlanSection.length > 0;
+
+  const blockPlanRules = hasBlockPlan
+    ? `
+## RULES WHEN A TASK BLOCK PLAN IS ACTIVE (HIGHEST PRIORITY)
+- The TASK BLOCK PLAN section above is **law**. It overrides this rules list, the conversation, and any saved tasks.
+- **IGNORE** previously registered tasks for entry count and hours. You may reuse wording and taxonomy only.
+- Output **exactly** the entry count and **exact** per-entry hours multiset defined in the plan — nothing else.
+`
+    : "";
+
+  return `You are a daily work report assistant. The user describes what they did on a given day; you help structure it into time-tracked task entries.
+
+## Report date
+${options.date}
+${blockPlanSection}
+## Allowed categories (use category_id exactly as listed)
+\`\`\`json
+${categoriesJson}
+\`\`\`
+
+## Allowed task types (use task_type_id exactly; each belongs to one category via category_id)
+\`\`\`json
+${taskTypesJson}
+\`\`\`
+
+## Rules
+- Extract every distinct work block the user mentions; assign category_id and task_type_id from the lists above only.
+${blockPlanRules}- When **no** block plan is active, use realistic hours (decimals allowed, e.g. 1.5).
+- If the user's activity does not fit well, pick the closest valid type.
+- You may add a short narrative overview of the day.
+- Respond with brief conversational text first, then **exactly one** fenced YAML block with root key \`dailyReportSummary\`.
+
+## Output (mandatory YAML schema)
+\`\`\`yaml
+dailyReportSummary:
+  narrative: "Optional one-paragraph day overview"
+  entries:
+    - hours: 2.5
+      description: "What was done"
+      category_id: <id from categories list>
+      task_type_id: <id from task types list>
+\`\`\`
+
+Include at least one entry when the user described work. Use snake_case keys category_id and task_type_id in YAML.`;
 }

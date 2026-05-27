@@ -1,7 +1,18 @@
+import { INTEGRATION_IDS, type IntegrationId } from "../../../shared/integrations.ts";
 import { DEFAULT_UI_THEME_ID } from "../lib/uiThemeConstants";
 import { normalizeUiThemeId } from "../lib/normalizeUiThemeId";
 import type { ThemeMode, UiLocale } from "@/types";
 import { parseUiTheme, type UiThemeV1 } from "./uiTheme";
+
+export type { IntegrationId };
+
+export type IntegrationState = {
+  configured: boolean;
+  lastCheckedAt?: string;
+  lastError?: string;
+};
+
+export type IntegrationsPreferences = Partial<Record<IntegrationId, IntegrationState>>;
 
 export type WorkspaceLayoutPreferences = {
   leftWidth: number;
@@ -9,6 +20,10 @@ export type WorkspaceLayoutPreferences = {
   /** @deprecated No longer shown in UI; kept for preference migration. */
   bottomHeight: number;
   filesSidebarWidth: number;
+};
+
+export type DailyReportsPreferences = {
+  storageRootPath?: string | null;
 };
 
 export type UserPreferencesV1 = {
@@ -20,6 +35,8 @@ export type UserPreferencesV1 = {
   lastRoute: string;
   activeConversationId: string;
   workspaceLayout: WorkspaceLayoutPreferences;
+  integrations: IntegrationsPreferences;
+  dailyReports?: DailyReportsPreferences;
 };
 
 export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutPreferences = {
@@ -38,7 +55,12 @@ export const DEFAULT_USER_PREFERENCES: UserPreferencesV1 = {
   lastRoute: "/",
   activeConversationId: "",
   workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
+  integrations: {},
 };
+
+export const DEFAULT_INTEGRATIONS: IntegrationsPreferences = Object.fromEntries(
+  INTEGRATION_IDS.map((id) => [id, { configured: false }]),
+) as IntegrationsPreferences;
 
 export const VALID_APP_ROUTES = [
   "/",
@@ -49,7 +71,9 @@ export const VALID_APP_ROUTES = [
   "/tools/markdown-pdf",
   "/tools/uml-render",
   "/tools/latex-tectonic",
+  "/daily-reports",
   "/themes",
+  "/configuration/integrations",
 ] as const;
 
 export type AppRoute = (typeof VALID_APP_ROUTES)[number];
@@ -75,6 +99,41 @@ export function normalizeAppRoute(route: string | undefined): AppRoute {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function parseIntegrationState(value: unknown): IntegrationState {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { configured: false };
+  }
+  const row = value as Record<string, unknown>;
+  return {
+    configured: row.configured === true,
+    lastCheckedAt: typeof row.lastCheckedAt === "string" ? row.lastCheckedAt : undefined,
+    lastError: typeof row.lastError === "string" ? row.lastError : undefined,
+  };
+}
+
+function parseIntegrations(value: unknown): IntegrationsPreferences {
+  const base = { ...DEFAULT_INTEGRATIONS };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return base;
+  }
+  const raw = value as Record<string, unknown>;
+  for (const id of INTEGRATION_IDS) {
+    if (raw[id] !== undefined) {
+      base[id] = parseIntegrationState(raw[id]);
+    }
+  }
+  return base;
+}
+
+function parseDailyReports(value: unknown): DailyReportsPreferences | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  const path = row.storageRootPath;
+  if (path === null) return { storageRootPath: null };
+  if (typeof path === "string" && path.trim()) return { storageRootPath: path.trim() };
+  return undefined;
 }
 
 function parseWorkspaceLayout(value: unknown): WorkspaceLayoutPreferences {
@@ -123,6 +182,8 @@ export function parseUserPreferences(raw: unknown): UserPreferencesV1 {
     lastRoute,
     activeConversationId,
     workspaceLayout: parseWorkspaceLayout(value.workspaceLayout),
+    integrations: parseIntegrations(value.integrations),
+    dailyReports: parseDailyReports(value.dailyReports),
   };
 }
 
@@ -137,6 +198,12 @@ export function mergeUserPreferences(
       ? { ...current.workspaceLayout, ...patch.workspaceLayout }
       : current.workspaceLayout,
     customUiThemes: patch.customUiThemes ?? current.customUiThemes,
+    integrations: patch.integrations
+      ? { ...current.integrations, ...patch.integrations }
+      : current.integrations,
+    dailyReports: patch.dailyReports
+      ? { ...current.dailyReports, ...patch.dailyReports }
+      : current.dailyReports,
     version: 1,
   });
 }

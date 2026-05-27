@@ -1,4 +1,8 @@
+import { IntegrationSetupLink } from "@/components/configuration/IntegrationSetupLink";
 import { Button } from "@/components/ui/button";
+import { useIntegrationConfigured } from "@/hooks/useIntegrationConfigured";
+import { integrationsStrings } from "@/lib/uiCopy";
+import { useEditorStore } from "@/state/store";
 import type { LatexRenderRequest, LatexRenderResult } from "@/types/electron-api";
 import { useState } from "react";
 
@@ -17,6 +21,9 @@ type LatexTectonicDemoProps = {
 };
 
 export function LatexTectonicDemo({ theme }: LatexTectonicDemoProps) {
+  const locale = useEditorStore((state) => state.locale);
+  const intl = integrationsStrings(locale);
+  const tectonicConfigured = useIntegrationConfigured("tectonic");
   const [source, setSource] = useState(SAMPLE_TEX);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<LatexRenderResult | null>(null);
@@ -56,11 +63,17 @@ export function LatexTectonicDemo({ theme }: LatexTectonicDemoProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-6">
       <div className={`max-w-4xl rounded-xl border p-6 shadow-sm ${panelClass}`}>
-        <h1 className="text-xl font-semibold">LaTeX (Tectonic, offline)</h1>
+        <h1 className="text-xl font-semibold">LaTeX (Tectonic via Docker)</h1>
         <p className="mt-2 text-sm opacity-80">
-          Compiles in an isolated temp directory with validation, <code className="text-xs">--untrusted</code>, and a
-          timeout. PDF path lives under app user data; SVG is not supported yet.
+          Compiles in an isolated temp directory via Docker with validation,{" "}
+          <code className="text-xs">--untrusted</code>, and a timeout. Configure the Tectonic integration first. SVG is
+          not supported yet.
         </p>
+        {tectonicConfigured === false ? (
+          <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+            {intl.tectonicHint} <IntegrationSetupLink locale={locale} />
+          </p>
+        ) : null}
 
         <label className="mt-4 block text-sm font-medium" htmlFor="latex-source">
           main.tex

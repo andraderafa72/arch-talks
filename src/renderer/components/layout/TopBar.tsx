@@ -13,11 +13,14 @@ import { Moon, Sun } from "lucide-react";
 export type AppMainSection =
   | "editor"
   | "templates"
+  | "themes"
+  | "configurationIntegrations"
   | "conversations"
   | "skillsVault"
   | "toolMarkdownPdf"
   | "toolUmlRender"
-  | "toolLatexTectonic";
+  | "toolLatexTectonic"
+  | "toolDailyReports";
 
 export function TopBar() {
   const navigate = useNavigate();
@@ -43,19 +46,24 @@ export function TopBar() {
 
   const section: AppMainSection = (() => {
     if (location.pathname === "/templates") return "templates";
-    if (location.pathname === "/themes") return "templates";
+    if (location.pathname === "/themes") return "themes";
+    if (location.pathname === "/configuration/integrations") return "configurationIntegrations";
     if (location.pathname === "/conversations") return "conversations";
     if (location.pathname === "/skills/vaults") return "skillsVault";
     if (location.pathname === "/tools/markdown-pdf") return "toolMarkdownPdf";
     if (location.pathname === "/tools/uml-render") return "toolUmlRender";
     if (location.pathname === "/tools/latex-tectonic") return "toolLatexTectonic";
+    if (location.pathname === "/daily-reports") return "toolDailyReports";
     return "editor";
   })();
   const saveStatus = fileNames.some((file) => hasUnsavedChanges(file)) ? "unsaved" : "saved";
   const t = topBarStrings(locale);
   const uiThemes = listThemes(customUiThemes);
   const isToolSection =
-    section === "toolMarkdownPdf" || section === "toolUmlRender" || section === "toolLatexTectonic";
+    section === "toolMarkdownPdf" ||
+    section === "toolUmlRender" ||
+    section === "toolLatexTectonic" ||
+    section === "toolDailyReports";
   const isWorkspaceSection = section === "editor" || section === "conversations";
 
   const isSkillsSection = section === "skillsVault";
@@ -141,6 +149,11 @@ export function TopBar() {
                 label: t.latexTectonic,
                 onSelect: () => navigate("/tools/latex-tectonic"),
               },
+              {
+                id: "tool-daily-reports",
+                label: t.dailyReports,
+                onSelect: () => navigate("/daily-reports"),
+              },
             ],
           },
         ],
@@ -166,7 +179,10 @@ export function TopBar() {
       {
         id: "config",
         label: t.configuration,
-        active: section === "templates",
+        active:
+          section === "templates" ||
+          section === "themes" ||
+          section === "configurationIntegrations",
         groups: [
           {
             items: [
@@ -174,6 +190,11 @@ export function TopBar() {
                 id: "config-templates",
                 label: t.templates,
                 onSelect: () => navigate("/templates"),
+              },
+              {
+                id: "config-integrations",
+                label: t.integrations,
+                onSelect: () => navigate("/configuration/integrations"),
               },
             ],
           },

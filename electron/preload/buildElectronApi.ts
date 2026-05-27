@@ -8,7 +8,9 @@ import { exposeUserPreferencesApis } from "./exposeUserPreferences.ts";
 import { exposeVaultApis } from "./exposeVault.ts";
 import { exposeVaultSkillsApis } from "./exposeVaultSkills.ts";
 import { exposeWindowControlsApis } from "./exposeWindowControls.ts";
+import { exposeIntegrationsApi } from "./exposeIntegrations.ts";
 import { exposeSpeechApis } from "./exposeSpeech.ts";
+import { exposeDailyReportApis } from "./exposeDailyReport.ts";
 
 export function buildElectronApi(): ElectronApi {
   return {
@@ -23,5 +25,7 @@ export function buildElectronApi(): ElectronApi {
     ...exposeVaultSkillsApis(),
     ...exposeWindowControlsApis(),
     ...exposeUserPreferencesApis(),
+    ...exposeIntegrationsApi(),
+    ...exposeDailyReportApis(),
   };
 }

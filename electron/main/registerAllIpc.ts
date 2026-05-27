@@ -1,5 +1,6 @@
 import { registerAiDiscoveryIpc } from "./ipc/aiDiscovery.ts";
 import { registerArchitectureIpc } from "./ipc/architecture.ts";
+import { registerIntegrationsIpc } from "./ipc/integrations.ts";
 import { registerLatexIpc } from "./ipc/latex.ts";
 import { registerMarkdownToolIpc } from "./ipc/markdownTool.ts";
 import { registerShellAndFilesIpc } from "./ipc/shellAndFiles.ts";
@@ -8,10 +9,12 @@ import { registerUserPreferencesIpc } from "./ipc/userPreferences.ts";
 import { registerVaultSkillsIpc } from "./ipc/vaultSkills.ts";
 import { registerVaultToolIpc } from "./ipc/vaultTool.ts";
 import { registerWorkspaceToolIpc } from "./ipc/workspaceTool.ts";
+import { registerDailyReportIpc } from "./ipc/dailyReportTool.ts";
 import { registerSpeechIpc } from "./ipc/speech.ts";
 
 export function registerAllIpc(): void {
   registerSpeechIpc();
+  registerIntegrationsIpc();
   registerLatexIpc();
   registerArchitectureIpc();
   registerShellAndFilesIpc();
@@ -22,4 +25,5 @@ export function registerAllIpc(): void {
   registerWorkspaceToolIpc();
   registerVaultToolIpc();
   registerVaultSkillsIpc();
+  registerDailyReportIpc();
 }

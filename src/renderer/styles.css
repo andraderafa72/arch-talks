@@ -9,6 +9,96 @@
   -webkit-app-region: no-drag;
 }
 
+/* macOS traffic lights (close · minimize · maximize) */
+.mac-traffic-lights {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding-left: 20px;
+  padding-right: 16px;
+  height: 100%;
+}
+
+.mac-traffic-light {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  cursor: default;
+  transition: filter 0.1s ease;
+}
+
+.mac-traffic-light:hover {
+  filter: brightness(0.95);
+}
+
+.mac-traffic-light:active {
+  filter: brightness(0.88);
+}
+
+.mac-traffic-light--close {
+  background-color: #ff5f57;
+  border-color: #e33e32;
+}
+
+.mac-traffic-light--minimize {
+  background-color: #febc2e;
+  border-color: #dfa023;
+}
+
+.mac-traffic-light--maximize {
+  background-color: #28c840;
+  border-color: #1aab29;
+}
+
+.mac-traffic-light__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+
+.mac-traffic-light__glyph--maximize {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.mac-traffic-lights:hover .mac-traffic-light__glyph {
+  opacity: 1;
+}
+
+.dark .mac-traffic-light {
+  border-color: rgba(0, 0, 0, 0.35);
+}
+
+.dark .mac-traffic-light--close {
+  background-color: #ff5f57;
+  border-color: #bf4942;
+}
+
+.dark .mac-traffic-light--minimize {
+  background-color: #febc2e;
+  border-color: #bf9123;
+}
+
+.dark .mac-traffic-light--maximize {
+  background-color: #28c840;
+  border-color: #1f9a31;
+}
+
 :root {
   --ui-font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   --ui-shell-bg: #fefefe;

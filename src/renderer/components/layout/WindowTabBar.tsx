@@ -4,7 +4,9 @@ import { useWindowTabsContext } from "@/contexts/WindowTabsContext";
 import { displayTabLabel, isHomeTab } from "@/lib/windowTabs";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/state/store";
-import { Copy, Home, Minus, Plus, Square, X } from "lucide-react";
+import { MacWindowControls } from "@/components/layout/MacWindowControls";
+import { WinWindowControls } from "@/components/layout/WinWindowControls";
+import { Home, Plus, X } from "lucide-react";
 
 function isElectronShell(): boolean {
   return typeof window !== "undefined" && Boolean(window.electronApi?.isFramelessShell ?? window.electronApi?.platform);
@@ -45,37 +47,20 @@ export function WindowTabBar() {
 
   const controlsOnLeft = chrome.platform === "darwin";
 
-  const windowControls = (
-    <div className="window-no-drag flex shrink-0 items-center gap-0.5 px-1.5">
-      <button
-        type="button"
-        className="inline-flex h-7 w-8 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700"
-        aria-label="Minimize window"
-        onClick={chrome.minimize}
-      >
-        <Minus className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        className="inline-flex h-7 w-8 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700"
-        aria-label={chrome.isMaximized ? "Restore window" : "Maximize window"}
-        onClick={chrome.toggleMaximize}
-      >
-        {chrome.isMaximized ? (
-          <Copy className="h-3 w-3" aria-hidden="true" />
-        ) : (
-          <Square className="h-3 w-3" aria-hidden="true" />
-        )}
-      </button>
-      <button
-        type="button"
-        className="inline-flex h-7 w-8 items-center justify-center rounded-md text-zinc-600 hover:bg-red-500 hover:text-white dark:text-zinc-300 dark:hover:bg-red-600"
-        aria-label="Close window"
-        onClick={chrome.close}
-      >
-        <X className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
-    </div>
+  const windowControls = controlsOnLeft ? (
+    <MacWindowControls
+      isMaximized={chrome.isMaximized}
+      onMinimize={chrome.minimize}
+      onToggleMaximize={chrome.toggleMaximize}
+      onClose={chrome.close}
+    />
+  ) : (
+    <WinWindowControls
+      isMaximized={chrome.isMaximized}
+      onMinimize={chrome.minimize}
+      onToggleMaximize={chrome.toggleMaximize}
+      onClose={chrome.close}
+    />
   );
 
   return (

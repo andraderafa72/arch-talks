@@ -1,7 +1,7 @@
 import { app } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_DAILY_REPORT_TAXONOMY } from "./dailyReportDefaults.ts";
+import { DEFAULT_DAILY_REPORT_TAXONOMY, mergeTaxonomyWithDefaults } from "./dailyReportDefaults.ts";
 import type { DailyReportCategory, DailyReportTaskType, DailyReportTaxonomy } from "./dailyReportTypes.ts";
 
 const TAXONOMY_FILE = "daily-report-taxonomy.json";
@@ -58,10 +58,8 @@ function parseTaskType(raw: unknown): DailyReportTaskType | undefined {
   return type;
 }
 
-export function parseDailyReportTaxonomy(raw: unknown): DailyReportTaxonomy {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return structuredClone(DEFAULT_DAILY_REPORT_TAXONOMY);
-  }
+function parseStoredDailyReportTaxonomy(raw: unknown): DailyReportTaxonomy | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const obj = raw as Record<string, unknown>;
   const categories: DailyReportCategory[] = [];
   if (Array.isArray(obj.categories)) {
@@ -77,17 +75,31 @@ export function parseDailyReportTaxonomy(raw: unknown): DailyReportTaxonomy {
       if (parsed) taskTypes.push(parsed);
     }
   }
-  if (categories.length === 0 || taskTypes.length === 0) {
-    return structuredClone(DEFAULT_DAILY_REPORT_TAXONOMY);
-  }
+  if (categories.length === 0 || taskTypes.length === 0) return null;
   return { version: 1, categories, taskTypes };
+}
+
+export function parseDailyReportTaxonomy(raw: unknown): DailyReportTaxonomy {
+  const stored = parseStoredDailyReportTaxonomy(raw);
+  if (!stored) return structuredClone(DEFAULT_DAILY_REPORT_TAXONOMY);
+  return mergeTaxonomyWithDefaults(stored);
 }
 
 export async function readDailyReportTaxonomy(): Promise<DailyReportTaxonomy> {
   const filePath = getTaxonomyPath();
   try {
     const raw = await fs.readFile(filePath, "utf8");
-    return parseDailyReportTaxonomy(JSON.parse(raw) as unknown);
+    const parsed = JSON.parse(raw) as unknown;
+    const stored = parseStoredDailyReportTaxonomy(parsed);
+    const merged = parseDailyReportTaxonomy(parsed);
+    if (
+      stored &&
+      (stored.categories.length !== merged.categories.length ||
+        stored.taskTypes.length !== merged.taskTypes.length)
+    ) {
+      await writeDailyReportTaxonomy(merged);
+    }
+    return merged;
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") return structuredClone(DEFAULT_DAILY_REPORT_TAXONOMY);

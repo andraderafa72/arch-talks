@@ -1,7 +1,8 @@
 import type { DailyReportTaxonomy } from "./dailyReportTypes.ts";
 import { slugFromLabel, uniqueSlug } from "./dailyReportTypes.ts";
 
-const TAXONOMY_BY_CATEGORY: Record<string, readonly string[]> = {
+/** Canonical BairesDev-style categories and task types (source of truth for defaults and merge). */
+export const CANONICAL_TAXONOMY_BY_CATEGORY: Record<string, readonly string[]> = {
   Absence: ["National Holiday"],
   Administrative: [
     "Daily Progress Report",
@@ -109,6 +110,7 @@ const TAXONOMY_BY_CATEGORY: Record<string, readonly string[]> = {
     "Reading documentation",
     "receiving ambassador support",
     "receiving mentoring suport",
+    "self training",
   ],
   "Training (trainer)": [
     "Other - training (trainer)",
@@ -119,7 +121,7 @@ const TAXONOMY_BY_CATEGORY: Record<string, readonly string[]> = {
 };
 
 function buildDefaultTaxonomy(): DailyReportTaxonomy {
-  const categories = Object.keys(TAXONOMY_BY_CATEGORY).map((label) => ({
+  const categories = Object.keys(CANONICAL_TAXONOMY_BY_CATEGORY).map((label) => ({
     id: slugFromLabel(label),
     label,
   }));
@@ -127,7 +129,7 @@ function buildDefaultTaxonomy(): DailyReportTaxonomy {
   const usedTypeIds = new Set<string>();
   const taskTypes: DailyReportTaxonomy["taskTypes"] = [];
 
-  for (const [categoryLabel, typeLabels] of Object.entries(TAXONOMY_BY_CATEGORY)) {
+  for (const [categoryLabel, typeLabels] of Object.entries(CANONICAL_TAXONOMY_BY_CATEGORY)) {
     const categoryId = slugFromLabel(categoryLabel);
     for (const label of typeLabels) {
       const baseId = slugFromLabel(label);
@@ -141,3 +143,27 @@ function buildDefaultTaxonomy(): DailyReportTaxonomy {
 }
 
 export const DEFAULT_DAILY_REPORT_TAXONOMY: DailyReportTaxonomy = buildDefaultTaxonomy();
+
+/** Adds any canonical categories and task types missing from a saved taxonomy. */
+export function mergeTaxonomyWithDefaults(saved: DailyReportTaxonomy): DailyReportTaxonomy {
+  const defaults = DEFAULT_DAILY_REPORT_TAXONOMY;
+  const categoryIds = new Set(saved.categories.map((c) => c.id));
+  const categories = [...saved.categories];
+  for (const category of defaults.categories) {
+    if (!categoryIds.has(category.id)) {
+      categories.push({ ...category });
+      categoryIds.add(category.id);
+    }
+  }
+
+  const taskTypeIds = new Set(saved.taskTypes.map((t) => t.id));
+  const taskTypes = [...saved.taskTypes];
+  for (const taskType of defaults.taskTypes) {
+    if (!taskTypeIds.has(taskType.id)) {
+      taskTypes.push({ ...taskType });
+      taskTypeIds.add(taskType.id);
+    }
+  }
+
+  return { version: 1, categories, taskTypes };
+}

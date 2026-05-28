@@ -14,7 +14,7 @@
     "pack": "npm run build && electron-builder",
     "lint": "eslint .",
     "test": "node --import=tsx --test src/renderer/types/uiTheme.test.ts src/renderer/lib/applyUiTheme.test.ts src/renderer/types/userPreferences.test.ts src/renderer/lib/chatSystemMessage.test.ts src/renderer/lib/streamingTextReveal.test.ts src/renderer/lib/dailyReportTime.test.ts",
-    "test:electron": "node --import=tsx --test electron/structuredPatchFromReply.test.ts electron/vault/parseVaultIngestionYaml.test.ts electron/daily-report/parseDailyReportSummary.test.ts electron/daily-report/dailyReportBlockPlan.test.ts electron/daily-report/dailyReportBlockPlanValidation.test.ts electron/daily-report/dailyReportIo.test.ts electron/integrations/catalog.test.ts",
+    "test:electron": "node --import=tsx --test electron/structuredPatchFromReply.test.ts electron/vault/parseVaultIngestionYaml.test.ts electron/daily-report/dailyReportDefaults.test.ts electron/daily-report/parseDailyReportSummary.test.ts electron/daily-report/dailyReportBlockPlan.test.ts electron/daily-report/dailyReportBlockPlanValidation.test.ts electron/daily-report/dailyReportIo.test.ts electron/integrations/catalog.test.ts",
     "preview": "vite preview",
     "start": "electron dist-electron/main.js"
   },

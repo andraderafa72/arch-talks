@@ -80,6 +80,10 @@ export function VaultPlaygroundProvider({
   children,
 }: VaultPlaygroundProviderProps) {
   const locale = useEditorStore((state) => state.locale);
+  const systemPromptRevision = useEditorStore(
+    (state) => state.conversations[documentId]?.systemPromptRevision ?? 0,
+  );
+  const globalPromptRevision = useEditorStore((state) => state.globalPromptRevision);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<VaultPlaygroundMessage[]>([]);
   const [skills, setSkills] = useState<VaultSkill[]>(DEFAULT_BUILTIN_SKILLS);
@@ -200,7 +204,7 @@ export function VaultPlaygroundProvider({
 
       try {
         const response = await api.vaultConsumptionChatSend({
-          sessionKey: `vault-playground:${documentId}`,
+          sessionKey: `vault-playground:${documentId}:g${globalPromptRevision}:p${systemPromptRevision}`,
           documentId,
           activeFile,
           files,
@@ -257,9 +261,11 @@ export function VaultPlaygroundProvider({
       activeFile,
       documentId,
       files,
+      globalPromptRevision,
       isSending,
       locale,
       selectedSkillId,
+      systemPromptRevision,
       vaultName,
     ],
   );

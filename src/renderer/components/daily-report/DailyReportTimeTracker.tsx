@@ -12,7 +12,7 @@ import {
 import { useDailyReportContext } from "@/contexts/DailyReportContext";
 import {
   formatElapsedDuration,
-  formatQuarterHours,
+  formatHoursLabel,
   parseDurationInputToMs,
   roundUpToQuarterHours,
 } from "@/lib/dailyReportTime";
@@ -86,6 +86,10 @@ export function DailyReportTimeTracker({ embedded = false }: DailyReportTimeTrac
   const categoryLabel = (id: string) => taxonomy?.categories.find((c) => c.id === id)?.label ?? id;
   const typesForCategory = (catId: string) =>
     taxonomy?.taskTypes.filter((tt) => tt.categoryId === catId) ?? [];
+  const totalTrackedHours = timeLogs.reduce(
+    (sum, log) => sum + (Number.isFinite(log.hours) ? log.hours : 0),
+    0,
+  );
 
   useEffect(() => {
     if (!activeTimeTracker) {
@@ -489,8 +493,13 @@ export function DailyReportTimeTracker({ embedded = false }: DailyReportTimeTrac
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="shrink-0 border-b border-[var(--ui-panel-border)] px-3 py-2 text-xs font-medium text-[var(--ui-muted-fg)]">
-          {t.timeTrackerLog}
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--ui-panel-border)] px-3 py-2 text-xs font-medium text-[var(--ui-muted-fg)]">
+          <span>{t.timeTrackerLog}</span>
+          {timeLogs.length > 0 ? (
+            <span>
+              {t.totalHours}: {formatHoursLabel(totalTrackedHours)}
+            </span>
+          ) : null}
         </div>
         <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
           {timeLogs.length === 0 ? (
@@ -498,7 +507,7 @@ export function DailyReportTimeTracker({ embedded = false }: DailyReportTimeTrac
           ) : (
             timeLogs.map((log) => {
               const summaryHours = roundUpToQuarterHours(log.hours);
-              const summaryLabel = formatQuarterHours(summaryHours);
+              const summaryLabel = formatHoursLabel(summaryHours);
               const isEditing = editingLogId === log.id && logDraft;
 
               if (isEditing) {
@@ -626,7 +635,7 @@ export function DailyReportTimeTracker({ embedded = false }: DailyReportTimeTrac
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap justify-between gap-2 text-[var(--ui-muted-fg)]">
                         <span>{formatLogRange(log.startedAt, log.endedAt)}</span>
-                        <span className="tabular-nums">{log.hours.toFixed(2)}h</span>
+                        <span>{formatHoursLabel(log.hours)}</span>
                       </div>
                       <p className="mt-0.5 text-[var(--ui-shell-fg)]">{log.description}</p>
                       {log.categoryId ? (

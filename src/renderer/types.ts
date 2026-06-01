@@ -143,6 +143,8 @@ export type Conversation = {
   umlPreviewZoom?: Record<string, number>;
   /** Folder the CLI agent should explore (local-agent only). */
   scanFolderPath?: string;
+  /** True when scanFolderPath was set via explicit user action (not project-folder auto-init). */
+  scanFolderExplicit?: boolean;
   /** Absolute disk paths indexed for @ mentions. */
   referencePaths?: string[];
   /** ISO timestamp when SYSTEM.md onboarding completed. */
@@ -157,4 +159,8 @@ export type Conversation = {
   vaultCategory?: VaultCategory;
   /** All file paths on disk under the vault root (refreshed from Electron). */
   vaultDiskPaths?: string[];
+  /** User-chosen folder where system design project config was initialized. */
+  systemDesignRootPath?: string;
+  /** Mirrors prompt-overrides manifest revision; used to start fresh AI sessions after prompt edits. */
+  systemPromptRevision?: number;
 };

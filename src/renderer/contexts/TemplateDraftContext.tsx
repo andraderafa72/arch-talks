@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { createTemplate } from "@/api/templates";
+import { useEditorStore } from "@/state/store";
 import type { TechnicalTemplate } from "@/types";
 
 type TemplateDraftContextValue = {
@@ -24,7 +25,7 @@ type TemplateDraftProviderProps = {
   technicalTemplates: TechnicalTemplate[];
   addTechnicalTemplate: (template: TechnicalTemplate) => void;
   createConversation: (options: { kind: "technical_document"; templateId?: string }) => void;
-  onNavigateToWorkspace: () => void;
+  onOpenWorkspace: (conversationId: string, label?: string) => void;
   children: ReactNode;
 };
 
@@ -32,7 +33,7 @@ export function TemplateDraftProvider({
   technicalTemplates,
   addTechnicalTemplate,
   createConversation,
-  onNavigateToWorkspace,
+  onOpenWorkspace,
   children,
 }: TemplateDraftProviderProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -47,7 +48,9 @@ export function TemplateDraftProvider({
       kind: "technical_document",
       templateId: selectedTemplateId || undefined,
     });
-    onNavigateToWorkspace();
+    const documentId = useEditorStore.getState().activeConversationId;
+    const conversation = useEditorStore.getState().conversations[documentId];
+    onOpenWorkspace(documentId, conversation?.title);
   };
 
   const saveTemplate = async () => {

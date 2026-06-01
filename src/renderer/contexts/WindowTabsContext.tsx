@@ -25,15 +25,21 @@ export type OpenNewTabOptions = {
   path: string;
   conversationId?: string;
   label?: string;
+  /** When true, always opens a new tab even if one already exists for the conversation. */
+  forceNew?: boolean;
 };
 
 type WindowTabsContextValue = {
   tabs: WindowTab[];
   activeTabId: string;
+  activeTab: WindowTab | undefined;
+  activeTabConversationId: string | undefined;
   isHomeActive: boolean;
   selectTab: (tab: WindowTab) => void;
   closeTab: (tabId: string) => void;
   openNewTab: (options: OpenNewTabOptions) => void;
+  /** Opens a workspace tab, or focuses it if that conversation is already open. */
+  openWorkspace: (conversationId: string, label?: string) => void;
   goHome: () => void;
 };
 
@@ -82,6 +88,8 @@ export function WindowTabsProvider({ children }: { children: ReactNode }) {
   const [activeTabId, setActiveTabId] = useState(() => defaultHomeTab(locale).id);
   const activeTabIdRef = useRef(activeTabId);
   activeTabIdRef.current = activeTabId;
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
 
   const updateTabLabels = useCallback(() => {
     const { conversations: latestConversations, locale: latestLocale } = useEditorStore.getState();
@@ -97,58 +105,83 @@ export function WindowTabsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const syncActiveTabToLocation = useCallback(() => {
-    const path = `${location.pathname}${location.search}`;
-    const isWorkspace = location.pathname === "/workspace";
-    const { activeConversationId: latestConversationId, conversations: latestConversations, locale: latestLocale } =
-      useEditorStore.getState();
-
-    setTabs((current) => {
-      const index = current.findIndex((tab) => tab.id === activeTabIdRef.current);
-      if (index === -1) return current;
-
-      const active = current[index];
-      const conversationId = isWorkspace
-        ? (active.conversationId ?? latestConversationId ?? undefined)
-        : undefined;
-      const label = tabLabel({ path, conversationId, label: active.label }, latestLocale, latestConversations);
-
-      if (active.path === path && active.conversationId === conversationId && active.label === label) {
-        return current;
-      }
-
-      return current.map((tab, tabIndex) =>
-        tabIndex === index ? { ...tab, path, conversationId, label } : tab,
-      );
-    });
-  }, [location.pathname, location.search]);
-
   useEffect(() => {
     if (skipLocationSyncRef.current) {
       skipLocationSyncRef.current = false;
       return;
     }
 
-    const path = location.pathname;
-    const { activeConversationId: latestConversationId } = useEditorStore.getState();
+    const path = `${location.pathname}${location.search}`;
+    const pathname = location.pathname;
+    const { activeConversationId: latestConversationId, conversations: latestConversations, locale: latestLocale } =
+      useEditorStore.getState();
 
-    setTabs((currentTabs) => {
-      if (path === "/") {
-        const homeTab = currentTabs.find(isHomeTab);
-        if (homeTab && homeTab.id !== activeTabIdRef.current) {
-          setActiveTabId(homeTab.id);
-        }
-      } else if (path === "/workspace" && latestConversationId) {
-        const match = currentTabs.find((tab) => tab.conversationId === latestConversationId);
-        if (match && match.id !== activeTabIdRef.current) {
-          setActiveTabId(match.id);
+    const currentTabs = tabsRef.current;
+    let nextActiveId = activeTabIdRef.current;
+    let appendedTab: WindowTab | null = null;
+
+    if (pathname === "/") {
+      const homeTab = currentTabs.find(isHomeTab);
+      if (homeTab) nextActiveId = homeTab.id;
+    } else if (pathname === "/workspace" && latestConversationId) {
+      const match = currentTabs.find((tab) => tab.conversationId === latestConversationId);
+      if (match) {
+        nextActiveId = match.id;
+      } else {
+        const { pathname: tabPathname, search } = parseRoutePath(path);
+        const conversation = latestConversations[latestConversationId];
+        appendedTab = createWindowTab(tabPathname, search, latestLocale, {
+          id: newWindowTabId(),
+          conversationId: latestConversationId,
+          label: conversation
+            ? workspaceTabTitle(conversation, latestLocale)
+            : labelForRoute("/workspace", "", latestLocale),
+        });
+        nextActiveId = appendedTab.id;
+      }
+    } else {
+      const active = currentTabs.find((tab) => tab.id === activeTabIdRef.current);
+      const needsDedicatedTab = !active || isHomeTab(active);
+
+      if (needsDedicatedTab) {
+        const existing = currentTabs.find((tab) => !isHomeTab(tab) && tab.path === path);
+        if (existing) {
+          nextActiveId = existing.id;
+        } else {
+          const { pathname: tabPathname, search } = parseRoutePath(path);
+          appendedTab = createWindowTab(tabPathname, search, latestLocale, { id: newWindowTabId() });
+          nextActiveId = appendedTab.id;
         }
       }
-      return currentTabs;
-    });
+    }
 
-    syncActiveTabToLocation();
-  }, [syncActiveTabToLocation]);
+    if (nextActiveId !== activeTabIdRef.current) {
+      setActiveTabId(nextActiveId);
+    }
+
+    setTabs((current) => {
+      const base = appendedTab ? [...current, appendedTab] : current;
+      const activeIndex = base.findIndex((tab) => tab.id === nextActiveId);
+      if (activeIndex === -1) return base;
+
+      const active = base[activeIndex];
+      if (isHomeTab(active)) return base;
+
+      const isWorkspace = pathname === "/workspace";
+      const conversationId = isWorkspace
+        ? (active.conversationId ?? latestConversationId ?? undefined)
+        : undefined;
+      const label = tabLabel({ path, conversationId, label: active.label }, latestLocale, latestConversations);
+
+      if (active.path === path && active.conversationId === conversationId && active.label === label) {
+        return base;
+      }
+
+      return base.map((tab, tabIndex) =>
+        tabIndex === activeIndex ? { ...tab, path, conversationId, label } : tab,
+      );
+    });
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     return useEditorStore.subscribe((state, prevState) => {
@@ -170,9 +203,11 @@ export function WindowTabsProvider({ children }: { children: ReactNode }) {
   );
 
   const openNewTab = useCallback(
-    ({ path, conversationId, label }: OpenNewTabOptions) => {
-      if (conversationId) {
-        const existing = tabs.find((tab) => tab.conversationId === conversationId);
+    ({ path, conversationId, label, forceNew }: OpenNewTabOptions) => {
+      const currentTabs = tabsRef.current;
+
+      if (conversationId && !forceNew) {
+        const existing = currentTabs.find((tab) => tab.conversationId === conversationId);
         if (existing) {
           selectTab(existing);
           return;
@@ -181,7 +216,7 @@ export function WindowTabsProvider({ children }: { children: ReactNode }) {
 
       const { pathname, search } = parseRoutePath(path);
       if (pathname === "/") {
-        const existingHome = tabs.find((tab) => isHomeTab(tab));
+        const existingHome = currentTabs.find((tab) => isHomeTab(tab));
         if (existingHome) {
           selectTab(existingHome);
           return;
@@ -206,11 +241,23 @@ export function WindowTabsProvider({ children }: { children: ReactNode }) {
         activateConversation(conversationId, setActiveConversation);
       }
     },
-    [conversations, locale, navigate, selectTab, setActiveConversation, tabs],
+    [conversations, locale, navigate, selectTab, setActiveConversation],
+  );
+
+  const openWorkspace = useCallback(
+    (conversationId: string, label?: string) => {
+      const conversation = conversations[conversationId];
+      openNewTab({
+        path: "/workspace",
+        conversationId,
+        label: label ?? conversation?.title,
+      });
+    },
+    [conversations, openNewTab],
   );
 
   const goHome = useCallback(() => {
-    const existingHome = tabs.find((tab) => isHomeTab(tab));
+    const existingHome = tabsRef.current.find((tab) => isHomeTab(tab));
     if (existingHome) {
       selectTab(existingHome);
       return;
@@ -221,7 +268,7 @@ export function WindowTabsProvider({ children }: { children: ReactNode }) {
     setTabs((current) => [...current, homeTab]);
     setActiveTabId(homeTab.id);
     navigate("/");
-  }, [locale, navigate, selectTab, tabs]);
+  }, [locale, navigate, selectTab]);
 
   const closeTab = useCallback(
     (tabId: string) => {
@@ -231,7 +278,7 @@ export function WindowTabsProvider({ children }: { children: ReactNode }) {
         if (index === -1) return current;
 
         const nextTabs = current.filter((tab) => tab.id !== tabId);
-        if (tabId === activeTabId) {
+        if (tabId === activeTabIdRef.current) {
           const fallback = nextTabs[Math.min(index, nextTabs.length - 1)] ?? defaultHomeTab(locale);
           skipLocationSyncRef.current = true;
           setActiveTabId(fallback.id);
@@ -243,22 +290,27 @@ export function WindowTabsProvider({ children }: { children: ReactNode }) {
         return nextTabs;
       });
     },
-    [activeTabId, locale, navigate, setActiveConversation],
+    [locale, navigate, setActiveConversation],
   );
 
   const isHomeActive = location.pathname === "/";
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  const activeTabConversationId = activeTab?.conversationId;
 
   const value = useMemo(
     () => ({
       tabs,
       activeTabId,
+      activeTab,
+      activeTabConversationId,
       isHomeActive,
       selectTab,
       closeTab,
       openNewTab,
+      openWorkspace,
       goHome,
     }),
-    [activeTabId, closeTab, goHome, isHomeActive, openNewTab, selectTab, tabs],
+    [activeTab, activeTabConversationId, activeTabId, closeTab, goHome, isHomeActive, openNewTab, openWorkspace, selectTab, tabs],
   );
 
   return <WindowTabsContext.Provider value={value}>{children}</WindowTabsContext.Provider>;

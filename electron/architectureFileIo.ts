@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 export const ARCHITECTURE_FOLDER_NAME = "ArchitectureFiles";
+const THEMES_SUBDIR = "themes";
 const DOCUMENTS_SUBDIR = "documents";
 const FILES_SUBDIR = "files";
 const CHATS_SUBDIR = "chats";
@@ -39,12 +40,15 @@ export type DocumentMeta = {
   referenceFolderPath?: string;
   referenceExcerpt?: string;
   scanFolderPath?: string;
+  scanFolderExplicit?: boolean;
   referencePaths?: string[];
   systemContextCompletedAt?: string;
   pendingVaultProposal?: unknown;
   vaultName?: string;
   vaultRootPath?: string;
   vaultCategory?: string;
+  systemDesignRootPath?: string;
+  systemPromptRevision?: number;
 };
 
 export type ChatDetail = {
@@ -132,6 +136,16 @@ function conversationStringToBuffer(content: string): Buffer {
 
 function getDataRoot(): string {
   return path.join(app.getPath("documents"), ARCHITECTURE_FOLDER_NAME, "data");
+}
+
+function getThemesRoot(): string {
+  return path.join(app.getPath("documents"), ARCHITECTURE_FOLDER_NAME, THEMES_SUBDIR);
+}
+
+function isSafeThemeId(id: string): boolean {
+  if (!id || id.length > 48) return false;
+  if (id.includes("..") || id.includes("/") || id.includes("\\")) return false;
+  return /^[a-z0-9][a-z0-9-_]*$/.test(id);
 }
 
 function getDocumentsRoot(): string {
@@ -326,6 +340,35 @@ export async function getVaultRootPathForDocument(documentId: string): Promise<s
   return meta?.vaultRootPath?.trim() || undefined;
 }
 
+function assertSafeExternalDeletePath(target: string): string {
+  const resolved = path.resolve(target.trim());
+  const parsed = path.parse(resolved);
+  if (resolved === parsed.root) throw new Error("Refusing to delete filesystem root");
+  if (resolved === app.getPath("home")) throw new Error("Refusing to delete home directory");
+  if (resolved.length < parsed.root.length + 4) throw new Error("Refusing to delete unsafe short path");
+  return resolved;
+}
+
+export async function deleteDocument(
+  documentId: string,
+  options: { deleteExternalRoot?: boolean } = {},
+): Promise<void> {
+  if (!isSafeId(documentId)) throw new Error("Invalid document id");
+  const meta = await readDocumentMeta(documentId);
+  if (options.deleteExternalRoot && meta) {
+    const externalRoot =
+      meta.kind === "vault"
+        ? meta.vaultRootPath?.trim()
+        : meta.kind === "system_design"
+          ? meta.systemDesignRootPath?.trim()
+          : undefined;
+    if (externalRoot) {
+      await fs.rm(assertSafeExternalDeletePath(externalRoot), { recursive: true, force: true });
+    }
+  }
+  await fs.rm(getDocumentRoot(documentId), { recursive: true, force: true });
+}
+
 export async function readArchitectureConversationsUnified(): Promise<JsonDocument<unknown>> {
   await ensureArchitectureDataDir();
   const docsRoot = getDocumentsRoot();
@@ -357,12 +400,15 @@ export async function readArchitectureConversationsUnified(): Promise<JsonDocume
       referenceFolderPath: meta.referenceFolderPath,
       referenceExcerpt: meta.referenceExcerpt,
       scanFolderPath: meta.scanFolderPath,
+      scanFolderExplicit: meta.scanFolderExplicit,
       referencePaths: meta.referencePaths,
       systemContextCompletedAt: meta.systemContextCompletedAt,
       pendingVaultProposal: meta.pendingVaultProposal ?? null,
       vaultName: meta.vaultName,
       vaultRootPath: meta.vaultRootPath,
       vaultCategory: meta.vaultCategory,
+      systemDesignRootPath: meta.systemDesignRootPath,
+      systemPromptRevision: meta.systemPromptRevision,
     });
   }
   return { items };
@@ -392,12 +438,15 @@ export async function writeAllChatsFromDocument(doc: JsonDocument<unknown>): Pro
       referenceFolderPath?: string;
       referenceExcerpt?: string;
       scanFolderPath?: string;
+      scanFolderExplicit?: boolean;
       referencePaths?: string[];
       systemContextCompletedAt?: string;
       pendingVaultProposal?: unknown;
       vaultName?: string;
       vaultRootPath?: string;
       vaultCategory?: string;
+      systemDesignRootPath?: string;
+      systemPromptRevision?: number;
     };
     if (!row.id || !isSafeId(row.id)) continue;
     keepIds.add(row.id);
@@ -421,12 +470,15 @@ export async function writeAllChatsFromDocument(doc: JsonDocument<unknown>): Pro
       referenceFolderPath: row.referenceFolderPath,
       referenceExcerpt: row.referenceExcerpt,
       scanFolderPath: row.scanFolderPath,
+      scanFolderExplicit: row.scanFolderExplicit,
       referencePaths: row.referencePaths,
       systemContextCompletedAt: row.systemContextCompletedAt,
       pendingVaultProposal: row.pendingVaultProposal ?? null,
       vaultName: row.vaultName,
       vaultRootPath: row.vaultRootPath,
       vaultCategory: row.vaultCategory,
+      systemDesignRootPath: row.systemDesignRootPath,
+      systemPromptRevision: row.systemPromptRevision,
     });
     const activeChatId = row.activeChatTabId ?? row.chatTabs?.[0]?.id;
     if (activeChatId) {
@@ -473,6 +525,79 @@ export async function readTemplatesJson(): Promise<JsonDocument<unknown>> {
 export async function writeTemplatesJson(doc: JsonDocument<unknown>): Promise<void> {
   await ensureArchitectureDataDir();
   await atomicWriteUtf8(path.join(getDataRoot(), TEMPLATES_NAME), `${JSON.stringify(doc, null, 2)}\n`);
+}
+
+export async function ensureThemesDir(): Promise<string> {
+  const root = getThemesRoot();
+  await fs.mkdir(root, { recursive: true });
+  return root;
+}
+
+function getThemeFilePath(id: string): string {
+  if (!isSafeThemeId(id)) throw new Error("Invalid theme id");
+  return path.join(getThemesRoot(), `${id}.json`);
+}
+
+export async function listUiThemeFiles(): Promise<unknown[]> {
+  const root = await ensureThemesDir();
+  let entries: string[];
+  try {
+    entries = await fs.readdir(root);
+  } catch {
+    return [];
+  }
+  const themes: unknown[] = [];
+  for (const name of entries) {
+    if (!name.endsWith(".json")) continue;
+    const id = name.slice(0, -".json".length);
+    if (!isSafeThemeId(id)) continue;
+    try {
+      const raw = await fs.readFile(path.join(root, name), "utf8");
+      themes.push(JSON.parse(raw) as unknown);
+    } catch {
+      /* skip invalid files */
+    }
+  }
+  return themes;
+}
+
+export async function writeUiThemeFile(theme: unknown): Promise<void> {
+  if (!theme || typeof theme !== "object" || Array.isArray(theme)) {
+    throw new Error("Invalid theme payload");
+  }
+  const id = typeof (theme as { id?: unknown }).id === "string" ? (theme as { id: string }).id.trim() : "";
+  if (!isSafeThemeId(id)) throw new Error("Invalid theme id");
+  await ensureThemesDir();
+  const payload = { ...(theme as Record<string, unknown>), builtIn: false, version: 1 };
+  await atomicWriteUtf8(getThemeFilePath(id), `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+export async function deleteUiThemeFile(id: string): Promise<void> {
+  if (!isSafeThemeId(id)) throw new Error("Invalid theme id");
+  await fs.unlink(getThemeFilePath(id)).catch((err: NodeJS.ErrnoException) => {
+    if (err.code !== "ENOENT") throw err;
+  });
+}
+
+export async function migrateEmbeddedCustomThemes(themes: unknown[]): Promise<number> {
+  if (!Array.isArray(themes) || themes.length === 0) return 0;
+  const root = await ensureThemesDir();
+  let written = 0;
+  for (const item of themes) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const id = typeof (item as { id?: unknown }).id === "string" ? (item as { id: string }).id.trim() : "";
+    if (!isSafeThemeId(id)) continue;
+    const filePath = path.join(root, `${id}.json`);
+    try {
+      await fs.access(filePath);
+      continue;
+    } catch {
+      /* file does not exist — migrate */
+    }
+    await writeUiThemeFile(item);
+    written += 1;
+  }
+  return written;
 }
 
 function sortTreeNodes(nodes: FsTreeNode[]): FsTreeNode[] {

@@ -12,6 +12,9 @@ import type {
   RuntimeLogger,
 } from "@orchestra-ai-runtime";
 import type { LocalAiOptions, LocalAiSelection } from "../../src/renderer/types/electron-api.ts";
+import { getAgentSandboxCwd, type LocalAiWorkspaceOptions } from "./agentWorkspace.ts";
+
+export type { LocalAiWorkspaceOptions };
 
 let aiRuntime: LocalAIProviderRuntime | null = null;
 let aiRuntimeInitializing: Promise<LocalAIProviderRuntime> | null = null;
@@ -23,7 +26,7 @@ function resolveAiLogContentMode(): AiLogContentMode {
   return raw === "full" ? "full" : "metadata";
 }
 
-function createAiRuntimeLogger(contentMode: AiLogContentMode): RuntimeLogger {
+function createAiRuntimeLogger(): RuntimeLogger {
   aiLogFileHandle = createFileLogger();
   const stderrLogger = createConsoleLogger({ compact: true });
 
@@ -41,12 +44,58 @@ type LocalAiChatSessionEntry = {
   session: ProcessSession;
   provider: string;
   modelId: string;
+  workspaceKey: string;
+  sessionOptionsKey: string;
   pending: Promise<unknown>;
   /** Detaches listeners from the previous in-flight turn on this session. */
   detachTurnListeners?: () => void;
   /** Cancels the current in-flight turn (kills agent/model subprocess). */
   cancelTurn?: () => void;
 };
+
+function localAiWorkspaceCacheKey(workspace: LocalAiWorkspaceOptions | undefined): string {
+  if (!workspace?.trustWorkspace && !workspace?.cwd?.trim()) return "";
+  const extra = [...(workspace.additionalDirs ?? [])].sort().join("|");
+  return `${workspace.trustWorkspace ? "1" : "0"}:${workspace.cwd?.trim() ?? ""}:${extra}`;
+}
+
+function buildLocalAiSessionMetadata(
+  workspace: LocalAiWorkspaceOptions | undefined,
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const base = metadata ? { ...metadata } : {};
+  if (!workspace?.trustWorkspace) return Object.keys(base).length > 0 ? base : undefined;
+  const additionalDirs = (workspace.additionalDirs ?? [])
+    .map((dir) => dir.trim())
+    .filter(Boolean);
+  return {
+    ...base,
+    "orchestra.trustWorkspace": true,
+    "orchestra.workspaceDirs": additionalDirs,
+  };
+}
+
+function localAiSessionOptionsCacheKey(options: {
+  args?: string[];
+  metadata?: Record<string, unknown>;
+}): string {
+  return JSON.stringify({
+    args: options.args ?? [],
+    metadata: options.metadata ?? {},
+  });
+}
+
+function resolveLocalAgentSessionCwd(
+  model: ModelInfo,
+  workspace: LocalAiWorkspaceOptions | undefined,
+): string | undefined {
+  if (model.category !== "local-agent") {
+    return workspace?.cwd?.trim() || undefined;
+  }
+  const explicit = workspace?.cwd?.trim();
+  if (explicit) return explicit;
+  return getAgentSandboxCwd();
+}
 
 function createAbortError(): Error {
   const error = new Error("Cancelled");
@@ -73,7 +122,7 @@ async function getAiRuntime(): Promise<LocalAIProviderRuntime> {
   aiRuntimeInitializing = (async () => {
     const contentMode = resolveAiLogContentMode();
     const runtime = new LocalAIProviderRuntime(undefined, {
-      logger: createAiRuntimeLogger(contentMode),
+      logger: createAiRuntimeLogger(),
       contentMode,
       level: "info",
     });
@@ -122,10 +171,11 @@ export async function getLocalAiOptions(): Promise<LocalAiOptions> {
   return { providers, models };
 }
 
+/** Matches the model that `runLocalAiChat` would use (including default first model). */
 export async function isLocalAgentSelection(selection: LocalAiSelection | undefined): Promise<boolean> {
-  if (!selection?.provider) return false;
-  const opts = await getLocalAiOptions();
-  return opts.providers.find((p) => p.provider === selection.provider)?.category === "local-agent";
+  const runtime = await getAiRuntime();
+  const model = resolveSelectedModel(runtime, selection);
+  return model?.category === "local-agent";
 }
 
 function resolveSelectedModel(runtime: LocalAIProviderRuntime, selection: LocalAiSelection | undefined) {
@@ -145,12 +195,21 @@ async function getLocalAiChatSession(
   sessionKey: string,
   model: ModelInfo,
   systemPrompt: string,
+  workspace: LocalAiWorkspaceOptions | undefined,
+  sessionOptions: {
+    args?: string[];
+    metadata?: Record<string, unknown>;
+  } = {},
 ): Promise<LocalAiChatSessionEntry> {
+  const workspaceKey = localAiWorkspaceCacheKey(workspace);
+  const sessionOptionsKey = localAiSessionOptionsCacheKey(sessionOptions);
   const existing = localAiChatSessions.get(sessionKey);
   const runtimeSession = runtime.getSession(sessionKey);
   const matchesModel =
     existing?.provider === model.provider &&
     existing.modelId === model.id &&
+    existing.workspaceKey === workspaceKey &&
+    existing.sessionOptionsKey === sessionOptionsKey &&
     runtimeSession === existing.session;
 
   if (
@@ -175,6 +234,9 @@ async function getLocalAiChatSession(
     provider: model.provider,
     modelId: model.id,
     systemPrompt,
+    cwd: resolveLocalAgentSessionCwd(model, workspace),
+    args: sessionOptions.args,
+    metadata: buildLocalAiSessionMetadata(workspace, sessionOptions.metadata),
   });
   if (!session) {
     throw new Error(
@@ -185,6 +247,8 @@ async function getLocalAiChatSession(
     session,
     provider: model.provider,
     modelId: model.id,
+    workspaceKey,
+    sessionOptionsKey,
     pending: Promise.resolve(),
   };
   localAiChatSessions.set(sessionKey, entry);
@@ -192,14 +256,17 @@ async function getLocalAiChatSession(
 }
 
 export type LocalAiReplyTimeout = {
-  /** Fail after this many ms without a new token (default 60s). Resets on every token. */
+  /** Fail after this many ms without a new token (default 60s; 10 min for local-agent). Resets on every token. */
   idleMs?: number;
-  /** Fail if no token/output arrives within this many ms from send (default 120s). */
+  /** Fail if no token/output arrives within this many ms from send (default 120s; 15 min for local-agent). */
   firstOutputMs?: number;
 };
 
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
 const DEFAULT_FIRST_OUTPUT_TIMEOUT_MS = 120_000;
+/** Local CLI agents may run tools for minutes without streaming tokens. */
+const LOCAL_AGENT_IDLE_TIMEOUT_MS = 600_000;
+const LOCAL_AGENT_FIRST_OUTPUT_TIMEOUT_MS = 900_000;
 const VAULT_IDLE_TIMEOUT_MS = 90_000;
 const VAULT_FIRST_OUTPUT_TIMEOUT_MS = 300_000;
 
@@ -351,6 +418,9 @@ export async function runLocalAiChat({
   selection,
   stream,
   replyTimeout,
+  workspace,
+  sessionArgs,
+  sessionMetadata,
 }: {
   sessionKey: string;
   systemPrompt: string;
@@ -358,6 +428,9 @@ export async function runLocalAiChat({
   selection: LocalAiSelection | undefined;
   stream?: { sender: WebContents; streamId: string };
   replyTimeout?: LocalAiReplyTimeout;
+  workspace?: LocalAiWorkspaceOptions;
+  sessionArgs?: string[];
+  sessionMetadata?: Record<string, unknown>;
 }): Promise<string> {
   const runtime = await getAiRuntime();
 
@@ -369,6 +442,9 @@ export async function runLocalAiChat({
   if (!model) {
     return "Provedor ou modelo selecionado não encontrado. Verifique se está instalado e reinicie o app.";
   }
+
+  const effectiveReplyTimeout =
+    replyTimeout ?? (model.category === "local-agent" ? localAgentChatReplyTimeout : undefined);
 
   const onStreamText =
     stream == null
@@ -383,9 +459,14 @@ export async function runLocalAiChat({
           }
         };
 
-  const entry = await getLocalAiChatSession(runtime, sessionKey, model, systemPrompt);
+  const entry = await getLocalAiChatSession(runtime, sessionKey, model, systemPrompt, workspace, {
+    args: sessionArgs,
+    metadata: sessionMetadata,
+  });
   const reply = entry.pending
-    .then(() => collectLocalAiReply(entry.session, entry, prompt, { onStreamText, replyTimeout }));
+    .then(() =>
+      collectLocalAiReply(entry.session, entry, prompt, { onStreamText, replyTimeout: effectiveReplyTimeout }),
+    );
   entry.pending = reply.catch(() => undefined);
   return reply;
 }
@@ -393,6 +474,11 @@ export async function runLocalAiChat({
 export const vaultChatReplyTimeout: LocalAiReplyTimeout = {
   idleMs: VAULT_IDLE_TIMEOUT_MS,
   firstOutputMs: VAULT_FIRST_OUTPUT_TIMEOUT_MS,
+};
+
+export const localAgentChatReplyTimeout: LocalAiReplyTimeout = {
+  idleMs: LOCAL_AGENT_IDLE_TIMEOUT_MS,
+  firstOutputMs: LOCAL_AGENT_FIRST_OUTPUT_TIMEOUT_MS,
 };
 
 /** Cancel an in-flight chat turn for the given session key (kills the agent/model subprocess). */

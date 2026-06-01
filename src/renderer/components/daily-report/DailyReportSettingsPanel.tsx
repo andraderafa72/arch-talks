@@ -9,10 +9,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDailyReportContext } from "@/contexts/DailyReportContext";
 import { dailyReportStrings } from "@/lib/uiCopy";
 import { useEditorStore } from "@/state/store";
 import type { DailyReportTaxonomy } from "@/types/daily-report";
+
+const LIST_ROW_CLASS =
+  "flex min-w-0 items-center gap-2 rounded-md border border-zinc-200 p-2 dark:border-zinc-700";
+const LIST_INPUT_CLASS = "h-8 min-w-0 flex-1 text-sm";
+const LIST_ID_CLASS = "w-28 shrink-0 truncate text-xs text-zinc-400";
+const LIST_SELECT_TRIGGER_CLASS = "h-8 w-50 shrink-0 text-sm";
 
 function uniqueSlug(base: string, existing: Set<string>): string {
   if (!existing.has(base)) return base;
@@ -28,11 +35,9 @@ export function DailyReportSettingsPanel() {
   const [draft, setDraft] = useState<DailyReportTaxonomy | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [taxonomyTab, setTaxonomyTab] = useState<"categories" | "task-types">("categories");
 
   const working = draft ?? taxonomy;
-  if (!working) {
-    return <p className="p-4 text-sm text-zinc-500">Loading…</p>;
-  }
 
   const persist = useCallback(
     async (next: DailyReportTaxonomy) => {
@@ -49,6 +54,10 @@ export function DailyReportSettingsPanel() {
     },
     [saveTaxonomy],
   );
+
+  if (!working) {
+    return <p className="p-4 text-sm text-zinc-500">Loading…</p>;
+  }
 
   const updateDraft = (next: DailyReportTaxonomy) => {
     setDraft(next);
@@ -109,114 +118,132 @@ export function DailyReportSettingsPanel() {
         </div>
       </section>
 
-      <section className="mt-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{t.categories}</h3>
-          <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={addCategory}>
-            <Plus className="h-3 w-3" />
-            {t.addCategory}
-          </Button>
-        </div>
-        <ul className="mt-2 space-y-2">
-          {working.categories.map((cat) => (
-            <li
-              key={cat.id}
-              className="flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 p-2 dark:border-zinc-700"
-            >
-              <Input
-                value={cat.label}
-                onChange={(e) => {
-                  const label = e.target.value;
-                  updateDraft({
-                    ...working,
-                    categories: working.categories.map((c) =>
-                      c.id === cat.id ? { ...c, label } : c,
-                    ),
-                  });
-                }}
-                className="h-8 flex-1 min-w-[8rem] text-sm"
-                aria-label={t.label}
-              />
-              <span className="text-xs text-zinc-400">
-                {t.id}: {cat.id}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 shrink-0 px-2"
-                onClick={() => removeCategory(cat.id)}
-                aria-label={t.removeEntry}
-              >
-                <Trash2 className="h-4 w-4 text-red-600" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <section className="mt-6 min-w-0">
+        <Tabs value={taxonomyTab} onValueChange={(value) => setTaxonomyTab(value as "categories" | "task-types")}>
+          <TabsList className="w-full justify-start">
+            <TabsTrigger value="categories">{t.categories}</TabsTrigger>
+            <TabsTrigger value="task-types">{t.taskTypes}</TabsTrigger>
+          </TabsList>
 
-      <section className="mt-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{t.taskTypes}</h3>
-          <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={addTaskType}>
-            <Plus className="h-3 w-3" />
-            {t.addTaskType}
-          </Button>
-        </div>
-        <ul className="mt-2 space-y-2">
-          {working.taskTypes.map((tt) => (
-            <li
-              key={tt.id}
-              className="flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 p-2 dark:border-zinc-700"
-            >
-              <Input
-                value={tt.label}
-                onChange={(e) => {
-                  const label = e.target.value;
-                  updateDraft({
-                    ...working,
-                    taskTypes: working.taskTypes.map((t) =>
-                      t.id === tt.id ? { ...t, label } : t,
-                    ),
-                  });
-                }}
-                className="h-8 flex-1 min-w-[8rem] text-sm"
-              />
-              <Select
-                value={tt.categoryId}
-                onValueChange={(categoryId) =>
-                  updateDraft({
-                    ...working,
-                    taskTypes: working.taskTypes.map((t) =>
-                      t.id === tt.id ? { ...t, categoryId } : t,
-                    ),
-                  })
-                }
-              >
-                <SelectTrigger className="h-8 w-[10rem] text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {working.categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className="text-xs text-zinc-400">{tt.id}</span>
+          <TabsContent value="categories" className="mt-4 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-zinc-500">{t.categories}</p>
+              <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={addCategory}>
+                <Plus className="h-3 w-3" />
+                {t.addCategory}
+              </Button>
+            </div>
+            <ul className="mt-2 space-y-2">
+              {working.categories.map((cat) => (
+                <li key={cat.id} className={LIST_ROW_CLASS}>
+                  <Input
+                    value={cat.label}
+                    onChange={(e) => {
+                      const label = e.target.value;
+                      updateDraft({
+                        ...working,
+                        categories: working.categories.map((c) =>
+                          c.id === cat.id ? { ...c, label } : c,
+                        ),
+                      });
+                    }}
+                    className={LIST_INPUT_CLASS}
+                    aria-label={t.label}
+                  />
+                  <span className={LIST_ID_CLASS} title={`${t.id}: ${cat.id}`}>
+                    {t.id}: {cat.id}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 shrink-0 px-2"
+                    onClick={() => removeCategory(cat.id)}
+                    aria-label={t.removeEntry}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </TabsContent>
+
+          <TabsContent value="task-types" className="mt-4 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-zinc-500">{t.taskTypes}</p>
               <Button
                 type="button"
-                variant="ghost"
+                variant="secondary"
                 size="sm"
-                className="h-8 w-8 px-2"
-                onClick={() => removeTaskType(tt.id)}
+                className="gap-1"
+                onClick={addTaskType}
+                disabled={working.categories.length === 0}
               >
-                <Trash2 className="h-4 w-4 text-red-600" />
+                <Plus className="h-3 w-3" />
+                {t.addTaskType}
               </Button>
-            </li>
-          ))}
-        </ul>
+            </div>
+            {working.categories.length === 0 ? (
+              <p className="mt-2 text-sm text-zinc-500">{t.addCategory}</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {working.taskTypes.map((tt) => (
+                  <li key={tt.id} className={LIST_ROW_CLASS}>
+                    <Input
+                      value={tt.label}
+                      onChange={(e) => {
+                        const label = e.target.value;
+                        updateDraft({
+                          ...working,
+                          taskTypes: working.taskTypes.map((row) =>
+                            row.id === tt.id ? { ...row, label } : row,
+                          ),
+                        });
+                      }}
+                      className={LIST_INPUT_CLASS}
+                      aria-label={t.label}
+                    />
+                    <Select
+                      value={tt.categoryId}
+                      onValueChange={(categoryId) =>
+                        updateDraft({
+                          ...working,
+                          taskTypes: working.taskTypes.map((row) =>
+                            row.id === tt.id ? { ...row, categoryId } : row,
+                          ),
+                        })
+                      }
+                    >
+                      <SelectTrigger className={LIST_SELECT_TRIGGER_CLASS} aria-label={t.selectCategory}>
+                        <SelectValue placeholder={t.selectCategory} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {working.categories.map((c) => (
+                          <SelectItem key={c.id} value={c.id} title={c.label}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className={LIST_ID_CLASS} title={`${t.id}: ${tt.id}`}>
+                      {t.id}: {tt.id}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 shrink-0 px-2"
+                      onClick={() => removeTaskType(tt.id)}
+                      aria-label={t.removeEntry}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </TabsContent>
+        </Tabs>
       </section>
 
       {message ? <p className="mt-4 text-sm text-red-600">{message}</p> : null}

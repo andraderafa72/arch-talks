@@ -26,6 +26,14 @@ export function formatQuarterHours(hours: number): string {
   return `${h}h ${m}m`;
 }
 
+/** Display decimal hours as Xh YYm (for read-only labels). */
+export function formatHoursLabel(hours: number): string {
+  const totalMinutes = Math.round(Math.max(0, hours) * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
 export type ActiveTrackerElapsedFields = {
   startedAt: string;
   accumulatedMs?: number;

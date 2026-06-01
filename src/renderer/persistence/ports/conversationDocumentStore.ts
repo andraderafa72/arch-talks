@@ -19,12 +19,15 @@ export type ConversationDocumentMeta = {
   referenceFolderPath?: string;
   referenceExcerpt?: string;
   scanFolderPath?: string;
+  scanFolderExplicit?: boolean;
   referencePaths?: string[];
   systemContextCompletedAt?: string;
   pendingVaultProposal?: VaultPlanProposal | null;
   vaultName?: string;
   vaultRootPath?: string;
   vaultCategory?: string;
+  systemDesignRootPath?: string;
+  systemPromptRevision?: number;
 };
 
 export interface ConversationDocumentStore {

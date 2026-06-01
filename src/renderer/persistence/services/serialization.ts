@@ -26,12 +26,14 @@ export function conversationsRecordToRows(
     referenceFolderPath: conversation.referenceFolderPath,
     referenceExcerpt: conversation.referenceExcerpt,
     scanFolderPath: conversation.scanFolderPath,
+    scanFolderExplicit: conversation.scanFolderExplicit,
     referencePaths: conversation.referencePaths,
     systemContextCompletedAt: conversation.systemContextCompletedAt,
     pendingVaultProposal: conversation.pendingVaultProposal ?? null,
     vaultName: conversation.vaultName,
     vaultRootPath: conversation.vaultRootPath,
     vaultCategory: conversation.vaultCategory,
+    systemDesignRootPath: conversation.systemDesignRootPath,
   }));
 }
 

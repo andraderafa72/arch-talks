@@ -1,4 +1,6 @@
 import { INTEGRATION_IDS, type IntegrationId } from "../../../shared/integrations.ts";
+import { listSettingsSectionPaths } from "../../../shared/settingsRoutes.ts";
+import { DEFAULT_SPEECH_MODEL_ID, parseSpeechModelId } from "../../../shared/speechModels.ts";
 import { DEFAULT_UI_THEME_ID } from "../lib/uiThemeConstants";
 import { normalizeUiThemeId } from "../lib/normalizeUiThemeId";
 import type { ThemeMode, UiLocale } from "@/types";
@@ -42,6 +44,7 @@ export type UserPreferencesV1 = {
   workspaceLayout: WorkspaceLayoutPreferences;
   integrations: IntegrationsPreferences;
   dailyReports?: DailyReportsPreferences;
+  speechModelId: string;
 };
 
 export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutPreferences = {
@@ -61,6 +64,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferencesV1 = {
   activeConversationId: "",
   workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
   integrations: {},
+  speechModelId: DEFAULT_SPEECH_MODEL_ID,
 };
 
 export const DEFAULT_INTEGRATIONS: IntegrationsPreferences = Object.fromEntries(
@@ -79,6 +83,8 @@ export const VALID_APP_ROUTES = [
   "/daily-reports",
   "/themes",
   "/configuration/integrations",
+  "/configuration/settings",
+  ...listSettingsSectionPaths(),
 ] as const;
 
 export type AppRoute = (typeof VALID_APP_ROUTES)[number];
@@ -98,6 +104,12 @@ function parseCustomUiThemesFromPrefs(raw: unknown): UiThemeV1[] {
 export function normalizeAppRoute(route: string | undefined): AppRoute {
   if (route && (VALID_APP_ROUTES as readonly string[]).includes(route)) {
     return route as AppRoute;
+  }
+  if (route?.startsWith("/configuration/settings/")) {
+    return "/configuration/settings/general";
+  }
+  if (route === "/configuration/settings") {
+    return "/configuration/settings/general";
   }
   return "/";
 }
@@ -215,6 +227,7 @@ export function parseUserPreferences(raw: unknown): UserPreferencesV1 {
     workspaceLayout: parseWorkspaceLayout(value.workspaceLayout),
     integrations: parseIntegrations(value.integrations),
     dailyReports: parseDailyReports(value.dailyReports),
+    speechModelId: parseSpeechModelId(value.speechModelId),
   };
 }
 

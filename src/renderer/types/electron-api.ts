@@ -49,6 +49,100 @@ export type LocalAiSelection = {
   modelId?: string;
 };
 
+export type PromptId =
+  | "technical_document.chat"
+  | "system_design.onboarding"
+  | "system_design.materialize"
+  | "system_design.chat"
+  | "vault.conversational"
+  | "vault.topic_analysis"
+  | "vault.batch_extraction"
+  | "vault.consumption";
+
+export type PromptSegmentDefinition = {
+  id: string;
+  label: string;
+  dynamic?: boolean;
+};
+
+export type PromptCatalogItem = {
+  id: PromptId;
+  kind: "technical_document" | "system_design" | "vault";
+  label: string;
+  description: string;
+  segments: PromptSegmentDefinition[];
+};
+
+export type PromptOverrideSegmentEntry = {
+  enabled: boolean;
+  file: string;
+};
+
+export type PromptOverrideEntry = {
+  enabled: boolean;
+  mode: "full" | "segments";
+  file?: string;
+  segments?: Record<string, PromptOverrideSegmentEntry>;
+  updatedAt: string;
+};
+
+export type PromptOverridesManifest = {
+  version: 1;
+  revision: number;
+  prompts: Partial<Record<PromptId, PromptOverrideEntry>>;
+};
+
+export type PromptOverrideSnapshot = {
+  manifest: PromptOverridesManifest;
+  contents: Partial<Record<PromptId, { full?: string; segments?: Record<string, string> }>>;
+};
+
+export type PromptOverrideScope = "global" | "document";
+
+export type PromptOverridePreviewRequest = {
+  scope?: PromptOverrideScope;
+  documentId?: string;
+  promptId: PromptId;
+  activeFile?: string;
+  files?: Record<string, string>;
+  systemMd?: string;
+  scanFolderPath?: string;
+  vaultCategory?: VaultCategory;
+  vaultName?: string;
+  structureReport?: string;
+};
+
+export type PromptOverridePreviewResponse = {
+  defaultPrompt: string;
+  resolvedPrompt: string;
+  segments: Record<string, string>;
+};
+
+export type PromptOverrideSaveRequest = {
+  scope?: PromptOverrideScope;
+  documentId?: string;
+  promptId: PromptId;
+  mode: "full" | "segments";
+  content?: string;
+  segmentId?: string;
+  enabled?: boolean;
+};
+
+export type PromptOverrideDeleteRequest = {
+  scope?: PromptOverrideScope;
+  documentId?: string;
+  promptId: PromptId;
+  segmentId?: string;
+};
+
+export type PromptOverrideToggleRequest = {
+  scope?: PromptOverrideScope;
+  documentId?: string;
+  promptId: PromptId;
+  segmentId?: string;
+  enabled: boolean;
+};
+
 // ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
@@ -90,6 +184,7 @@ export type UmlChatResponse = MarkdownChatResponse;
 
 export type WorkspaceChatRequest = {
   sessionKey: string;
+  documentId?: string;
   activeFile: string;
   files: Record<string, string>;
   prompt: string;
@@ -104,6 +199,7 @@ export type WorkspaceChatResponse = {
 
 export type SystemDesignContextChatRequest = {
   sessionKey: string;
+  documentId?: string;
   prompt: string;
   aiSelection?: LocalAiSelection;
   streamId?: string;
@@ -116,18 +212,22 @@ export type SystemDesignContextChatResponse = {
 
 export type SystemDesignMaterializeRequest = {
   sessionKey: string;
+  documentId?: string;
   messages: { role: "user" | "assistant" | "system"; content: string }[];
   aiSelection?: LocalAiSelection;
   streamId?: string;
   scanFolderPath?: string;
+  files?: Record<string, string>;
 };
 
 export type SystemDesignMaterializeResponse = {
   systemMd: string;
+  suggestionsMd: string;
 };
 
 export type SystemDesignChatRequest = {
   sessionKey: string;
+  documentId?: string;
   activeFile: string;
   files: Record<string, string>;
   systemMd: string;
@@ -141,6 +241,31 @@ export type SystemDesignChatRequest = {
 export type SystemDesignChatResponse = {
   reply: string;
   patch?: MarkdownChatPatch;
+};
+
+export type ArchSystemDesignConfig = {
+  version: 1;
+  kind: "system_design";
+  name: string;
+  createdAt: string;
+  documentId: string;
+  rootPath: string;
+};
+
+export type SystemDesignInitializeRequest = {
+  documentId: string;
+  name: string;
+  mode: "existing" | "new";
+  existingRootPath?: string;
+  parentPath?: string;
+  newFolderName?: string;
+};
+
+export type SystemDesignInitializeResponse = {
+  rootPath: string;
+  archConfig: ArchSystemDesignConfig;
+  files: Record<string, string>;
+  activeFile: string;
 };
 
 export type SystemDesignReferenceEntry = {
@@ -357,11 +482,16 @@ export type ElectronApi = {
   readArchitectureTemplates: () => Promise<{ items: unknown[] }>;
   writeArchitectureConversations: (doc: { items: unknown[] }) => Promise<void>;
   writeArchitectureTemplates: (doc: { items: unknown[] }) => Promise<void>;
+  listUiThemes: () => Promise<unknown[]>;
+  writeUiTheme: (theme: unknown) => Promise<void>;
+  deleteUiTheme: (id: string) => Promise<void>;
+  migrateEmbeddedUiThemes: (themes: unknown[]) => Promise<number>;
   getArchitectureDataDir: () => Promise<string>;
   readDocumentIndex?: (documentId: string) => Promise<unknown>;
   writeDocumentIndex?: (documentId: string, index: unknown) => Promise<void>;
   readDocumentFiles?: (documentId: string) => Promise<Record<string, string>>;
   writeDocumentFiles?: (documentId: string, files: Record<string, string>) => Promise<void>;
+  deleteDocument?: (documentId: string, options?: { deleteExternalRoot?: boolean }) => Promise<void>;
   chatLoad?: (documentId: string, chatId: string) => Promise<unknown>;
   chatSave?: (documentId: string, chatId: string, detail: unknown) => Promise<void>;
   chatListFilesTree?: (chatId: string) => Promise<FsTreeNode[]>;
@@ -402,6 +532,13 @@ export type ElectronApi = {
     req: SystemDesignListReferenceEntriesRequest,
   ) => Promise<SystemDesignListReferenceEntriesResponse>;
   systemDesignGetChatFolderPath?: (documentId: string) => Promise<{ path: string }>;
+  systemDesignEnsureSaveFolder?: (req: {
+    path: string;
+    createIfMissing?: boolean;
+  }) => Promise<{ path: string }>;
+  systemDesignInitialize?: (
+    req: SystemDesignInitializeRequest,
+  ) => Promise<SystemDesignInitializeResponse>;
   pickDirectory?: () => Promise<{ ok: true; path: string } | { ok: false; canceled: true }>;
   vaultChatSend?: (req: VaultChatRequest) => Promise<VaultChatResponse>;
   vaultConsumptionChatSend?: (req: VaultConsumptionChatRequest) => Promise<VaultConsumptionChatResponse>;
@@ -420,6 +557,17 @@ export type ElectronApi = {
   vaultSkillsList?: () => Promise<import("./vaultSkill").VaultSkill[]>;
   vaultSkillsSave?: (skill: import("./vaultSkill").VaultSkillInput) => Promise<import("./vaultSkill").VaultSkill>;
   vaultSkillsDelete?: (id: string) => Promise<void>;
+  promptOverridesListCatalog?: (
+    kind?: "technical_document" | "system_design" | "vault",
+  ) => Promise<PromptCatalogItem[]>;
+  promptOverridesReadManifest?: (
+    scopeOrDocumentId: PromptOverrideScope | string,
+    documentId?: string,
+  ) => Promise<PromptOverrideSnapshot>;
+  promptOverridesPreview?: (req: PromptOverridePreviewRequest) => Promise<PromptOverridePreviewResponse>;
+  promptOverridesSave?: (req: PromptOverrideSaveRequest) => Promise<PromptOverridesManifest>;
+  promptOverridesDelete?: (req: PromptOverrideDeleteRequest) => Promise<PromptOverridesManifest>;
+  promptOverridesSetEnabled?: (req: PromptOverrideToggleRequest) => Promise<PromptOverridesManifest>;
   windowMinimize?: () => Promise<void>;
   windowToggleMaximize?: () => Promise<boolean>;
   windowClose?: () => Promise<void>;
@@ -431,12 +579,14 @@ export type ElectronApi = {
   /** Cancel an in-flight local AI chat turn (kills agent/model subprocess for the session key). */
   aiChatCancel?: (sessionKey: string) => Promise<boolean>;
   /** Preload local Whisper model (first voice use may download ~40MB). */
-  speechEnsureModel?: () => Promise<{ ok: true }>;
+  speechSetModelId?: (modelId: string) => Promise<{ ok: true }>;
+  speechEnsureModel?: (req?: { modelId?: string }) => Promise<{ ok: true }>;
   /** Transcribe a PCM audio chunk captured in the renderer (Electron offline STT). */
   speechTranscribeChunk?: (req: {
     samples: ArrayBuffer;
     sampleRate: number;
     locale: "en" | "pt";
+    modelId?: string;
   }) => Promise<{ text: string }>;
   integrationsCheck?: (payload?: IntegrationId | "all") => Promise<IntegrationCheckResponse>;
   integrationsRunStart?: (id: IntegrationId) => Promise<IntegrationRunStartResponse>;

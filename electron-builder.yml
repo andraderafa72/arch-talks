@@ -1,5 +1,6 @@
 appId: com.ragtalks.frontend
 productName: RAG Talks
+icon: public/favicon.ico
 directories:
   output: release
 files:

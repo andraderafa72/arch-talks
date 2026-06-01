@@ -3,62 +3,10 @@ import { FolderOpen, FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getElectronApi } from "@/lib/electronBridge";
-import { cn } from "@/lib/utils";
+import { FolderBrowseButton, TabPanelIntro, homeOptionButtonClass } from "@/pages/home/homePanelShared";
 import type { VaultCategory } from "@/types";
 
 type VaultLocationMode = "existing" | "new";
-
-const vaultModeButtonClass = (active: boolean) =>
-  cn(
-    "rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400",
-    active
-      ? "border-zinc-900 bg-zinc-100 shadow-sm dark:border-zinc-300 dark:bg-zinc-800"
-      : "border-zinc-200 bg-[#fefefe] hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800/80",
-  );
-
-function TabPanelIntro({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
-      <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{title}</h2>
-      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{description}</p>
-    </div>
-  );
-}
-
-function FolderBrowseButton({
-  label,
-  selectedPath,
-  emptyHint,
-  onBrowse,
-}: {
-  label: string;
-  selectedPath: string;
-  emptyHint: string;
-  onBrowse: () => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={onBrowse}
-        className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-dashed border-zinc-400 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 transition-colors hover:border-zinc-600 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:border-zinc-500 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-zinc-400 dark:hover:bg-zinc-700"
-      >
-        <FolderOpen className="h-4 w-4 shrink-0" aria-hidden />
-        {label}
-      </button>
-      {selectedPath ? (
-        <p
-          className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-mono text-xs leading-relaxed text-zinc-700 break-all dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-300"
-          title={selectedPath}
-        >
-          {selectedPath}
-        </p>
-      ) : (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{emptyHint}</p>
-      )}
-    </div>
-  );
-}
 
 type VaultHomePanelProps = {
   onCreate: (options: {
@@ -123,8 +71,8 @@ export function VaultHomePanel({ onCreate }: VaultHomePanelProps) {
       />
 
       <div>
-        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Vault category</p>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Cannot be changed after creation.</p>
+        <p className="text-sm font-medium text-[var(--ui-shell-fg)]">Vault category</p>
+        <p className="mt-1 text-xs text-[var(--ui-muted-fg)]">Cannot be changed after creation.</p>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
           {(
             [
@@ -149,17 +97,17 @@ export function VaultHomePanel({ onCreate }: VaultHomePanelProps) {
               key={cat.id}
               type="button"
               onClick={() => setVaultCategory(cat.id)}
-              className={vaultModeButtonClass(vaultCategory === cat.id)}
+              className={homeOptionButtonClass(vaultCategory === cat.id)}
               aria-pressed={vaultCategory === cat.id}
             >
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{cat.title}</span>
-              <p className="mt-1 text-xs font-normal text-zinc-600 dark:text-zinc-400">{cat.desc}</p>
+              <span className="text-sm font-semibold text-[var(--ui-shell-fg)]">{cat.title}</span>
+              <p className="mt-1 text-xs font-normal text-[var(--ui-muted-fg)]">{cat.desc}</p>
             </button>
           ))}
         </div>
       </div>
 
-      <label className="block space-y-1.5 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+      <label className="block space-y-1.5 text-sm font-medium text-[var(--ui-shell-fg)]">
         Vault name
         <Input
           type="text"
@@ -171,46 +119,46 @@ export function VaultHomePanel({ onCreate }: VaultHomePanelProps) {
       </label>
 
       <div>
-        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Vault location</p>
+        <p className="text-sm font-medium text-[var(--ui-shell-fg)]">Vault location</p>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button
             type="button"
             onClick={() => setLocationMode("existing")}
-            className={vaultModeButtonClass(locationMode === "existing")}
+            className={homeOptionButtonClass(locationMode === "existing")}
             aria-pressed={locationMode === "existing"}
           >
             <div className="flex items-center gap-2">
-              <FolderOpen className="h-4 w-4 shrink-0 text-zinc-600 dark:text-zinc-400" aria-hidden />
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Existing folder</span>
+              <FolderOpen className="h-4 w-4 shrink-0 text-[var(--ui-muted-fg)]" aria-hidden />
+              <span className="text-sm font-semibold text-[var(--ui-shell-fg)]">Existing folder</span>
             </div>
-            <p className="mt-1 text-xs font-normal text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-xs font-normal text-[var(--ui-muted-fg)]">
               Point the vault at a folder already on your computer.
             </p>
           </button>
           <button
             type="button"
             onClick={() => setLocationMode("new")}
-            className={vaultModeButtonClass(locationMode === "new")}
+            className={homeOptionButtonClass(locationMode === "new")}
             aria-pressed={locationMode === "new"}
           >
             <div className="flex items-center gap-2">
-              <FolderPlus className="h-4 w-4 shrink-0 text-zinc-600 dark:text-zinc-400" aria-hidden />
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">New folder</span>
+              <FolderPlus className="h-4 w-4 shrink-0 text-[var(--ui-muted-fg)]" aria-hidden />
+              <span className="text-sm font-semibold text-[var(--ui-shell-fg)]">New folder</span>
             </div>
-            <p className="mt-1 text-xs font-normal text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-xs font-normal text-[var(--ui-muted-fg)]">
               Create a new folder inside a parent directory you choose.
             </p>
           </button>
         </div>
 
         <div
-          className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-600 dark:bg-zinc-800/40"
+          className="mt-3 rounded-lg border border-[var(--ui-panel-border)] bg-[var(--ui-header-btn-active-bg)] p-4"
           role="region"
           aria-label={locationMode === "existing" ? "Existing folder settings" : "New folder settings"}
         >
           {locationMode === "existing" ? (
             <>
-              <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              <p className="text-sm text-[var(--ui-muted-fg)]">
                 Open any existing folder as your vault. Markdown notes are loaded automatically; other files appear
                 when you switch the sidebar to &quot;All files&quot;.
               </p>
@@ -225,11 +173,11 @@ export function VaultHomePanel({ onCreate }: VaultHomePanelProps) {
             </>
           ) : (
             <>
-              <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              <p className="text-sm text-[var(--ui-muted-fg)]">
                 Pick where to create the vault, then name the new folder.
               </p>
               <div className="mt-3">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--ui-muted-fg)]">
                   Parent directory
                 </p>
                 <FolderBrowseButton
@@ -239,14 +187,14 @@ export function VaultHomePanel({ onCreate }: VaultHomePanelProps) {
                   onBrowse={() => void pickDirectory().then((p) => p && setParentPath(p))}
                 />
               </div>
-              <label className="mt-4 block space-y-1.5 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              <label className="mt-4 block space-y-1.5 text-sm font-medium text-[var(--ui-shell-fg)]">
                 New folder name
                 <Input
                   type="text"
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
                   placeholder="e.g. my-product-vault"
-                  className="bg-white font-normal dark:bg-zinc-900"
+                  className="border-[var(--ui-panel-border)] bg-[var(--ui-panel-bg)] font-normal text-[var(--ui-shell-fg)]"
                 />
               </label>
             </>

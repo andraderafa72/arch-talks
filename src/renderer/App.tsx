@@ -1,12 +1,29 @@
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { SettingsHubLayout } from "@/components/configuration/settings/SettingsHubLayout";
+import {
+  DEFAULT_SETTINGS_PATH,
+  SETTINGS_BASE_PATH,
+} from "@/components/configuration/settings/settingsRoutes";
+import {
+  DailyReportsSettingsSection,
+  GeneralSettingsPanel,
+  LatexSettingsSection,
+  LatexTectonicSettingsSection,
+  MarkdownPdfSettingsSection,
+  SystemDesignSettingsSection,
+  SystemPromptsSettingsSection,
+  UmlRenderSettingsSection,
+  VaultSettingsSection,
+} from "@/components/configuration/settings/settingsRouteElements";
 import { TopBar } from "@/components/layout/TopBar";
 import { WindowTabBar } from "@/components/layout/WindowTabBar";
 import { TemplateDraftProvider } from "@/contexts/TemplateDraftContext";
-import { WindowTabsProvider } from "@/contexts/WindowTabsContext";
+import { useWindowTabsContext, WindowTabsProvider } from "@/contexts/WindowTabsContext";
 import { WorkspaceConversationProvider } from "@/contexts/WorkspaceConversationContext";
 import { WorkspaceLayoutProvider } from "@/contexts/WorkspaceLayoutContext";
 import { useArchitectureBootstrap } from "@/hooks/useArchitectureBootstrap";
 import { useUserPreferencesSync } from "@/hooks/useUserPreferencesSync";
+import { useSpeechModelSync } from "@/hooks/useSpeechModelSync";
 import { ConversationsPage } from "@/pages/ConversationsPage";
 import { HomePage } from "@/pages/HomePage";
 import { IntegrationsPage } from "@/pages/IntegrationsPage";
@@ -19,14 +36,16 @@ import { VaultSkillsPage } from "@/pages/VaultSkillsPage";
 import { DailyReportsPage } from "@/pages/DailyReportsPage";
 import { WorkspacePage } from "@/pages/WorkspacePage";
 import { useEditorStore } from "@/state/store";
+import type { WorkspaceLayoutPreferences } from "@/types/userPreferences";
 
 type AppContentProps = {
   theme: "light" | "dark";
 };
 
 function AppContent({ theme }: AppContentProps) {
-  const navigate = useNavigate();
+  const { goHome } = useWindowTabsContext();
   useUserPreferencesSync();
+  useSpeechModelSync();
 
   return (
     <>
@@ -36,10 +55,22 @@ function AppContent({ theme }: AppContentProps) {
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/workspace" element={<WorkspacePage theme={theme} onGoHome={() => navigate("/")} />} />
+          <Route path="/workspace" element={<WorkspacePage theme={theme} onGoHome={goHome} />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/themes" element={<ThemesPage />} />
           <Route path="/configuration/integrations" element={<IntegrationsPage />} />
+          <Route path={SETTINGS_BASE_PATH} element={<Navigate to={DEFAULT_SETTINGS_PATH} replace />} />
+          <Route element={<SettingsHubLayout />}>
+            <Route path={`${SETTINGS_BASE_PATH}/general`} element={<GeneralSettingsPanel />} />
+            <Route path={`${SETTINGS_BASE_PATH}/system-prompts`} element={<SystemPromptsSettingsSection />} />
+            <Route path={`${SETTINGS_BASE_PATH}/system-design`} element={<SystemDesignSettingsSection />} />
+            <Route path={`${SETTINGS_BASE_PATH}/latex`} element={<LatexSettingsSection />} />
+            <Route path={`${SETTINGS_BASE_PATH}/vault`} element={<VaultSettingsSection />} />
+            <Route path={`${SETTINGS_BASE_PATH}/markdown-pdf`} element={<MarkdownPdfSettingsSection />} />
+            <Route path={`${SETTINGS_BASE_PATH}/uml-render`} element={<UmlRenderSettingsSection />} />
+            <Route path={`${SETTINGS_BASE_PATH}/latex-tectonic`} element={<LatexTectonicSettingsSection />} />
+            <Route path={`${SETTINGS_BASE_PATH}/daily-reports`} element={<DailyReportsSettingsSection />} />
+          </Route>
           <Route path="/conversations" element={<ConversationsPage />} />
           <Route path="/skills/vaults" element={<VaultSkillsPage />} />
           <Route path="/tools/markdown-pdf" element={<MarkdownToPdfPage theme={theme} />} />
@@ -53,8 +84,40 @@ function AppContent({ theme }: AppContentProps) {
   );
 }
 
+type AppProvidersProps = {
+  theme: "light" | "dark";
+  initialLayout: WorkspaceLayoutPreferences;
+  technicalTemplates: ReturnType<typeof useEditorStore.getState>["technicalTemplates"];
+  createConversation: ReturnType<typeof useEditorStore.getState>["createConversation"];
+  addTechnicalTemplate: ReturnType<typeof useEditorStore.getState>["addTechnicalTemplate"];
+};
+
+function AppProviders({
+  theme,
+  initialLayout,
+  technicalTemplates,
+  createConversation,
+  addTechnicalTemplate,
+}: AppProvidersProps) {
+  const { openWorkspace } = useWindowTabsContext();
+
+  return (
+    <TemplateDraftProvider
+      technicalTemplates={technicalTemplates}
+      addTechnicalTemplate={addTechnicalTemplate}
+      createConversation={createConversation}
+      onOpenWorkspace={openWorkspace}
+    >
+      <WorkspaceConversationProvider onOpenConversation={openWorkspace}>
+        <WorkspaceLayoutProvider initialLayout={initialLayout}>
+          <AppContent theme={theme} />
+        </WorkspaceLayoutProvider>
+      </WorkspaceConversationProvider>
+    </TemplateDraftProvider>
+  );
+}
+
 function App() {
-  const navigate = useNavigate();
   const {
     technicalTemplates,
     theme,
@@ -88,18 +151,13 @@ function App() {
     <WindowTabsProvider>
       <div className={shellClassName}>
         <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)]">
-          <TemplateDraftProvider
+          <AppProviders
+            theme={theme}
+            initialLayout={initialLayout}
             technicalTemplates={technicalTemplates}
-            addTechnicalTemplate={addTechnicalTemplate}
             createConversation={createConversation}
-            onNavigateToWorkspace={() => navigate("/workspace")}
-          >
-            <WorkspaceConversationProvider onOpenConversation={() => navigate("/workspace")}>
-              <WorkspaceLayoutProvider initialLayout={initialLayout}>
-                <AppContent theme={theme} />
-              </WorkspaceLayoutProvider>
-            </WorkspaceConversationProvider>
-          </TemplateDraftProvider>
+            addTechnicalTemplate={addTechnicalTemplate}
+          />
         </div>
 
         {errorMessage ? (

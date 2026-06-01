@@ -6,14 +6,22 @@ export type SpeechTranscribeChunkRequest = {
   samples: ArrayBuffer;
   sampleRate: number;
   locale: UiLocale;
+  modelId?: string;
+};
+
+export type SpeechEnsureModelRequest = {
+  modelId?: string;
 };
 
 export function exposeSpeechApis(): Pick<
   ElectronApi,
-  "speechEnsureModel" | "speechTranscribeChunk"
+  "speechSetModelId" | "speechEnsureModel" | "speechTranscribeChunk"
 > {
   return {
-    speechEnsureModel: (): Promise<{ ok: true }> => ipcRenderer.invoke("speech:ensureModel"),
+    speechSetModelId: (modelId: string): Promise<{ ok: true }> =>
+      ipcRenderer.invoke("speech:setModelId", modelId),
+    speechEnsureModel: (req?: SpeechEnsureModelRequest): Promise<{ ok: true }> =>
+      ipcRenderer.invoke("speech:ensureModel", req ?? {}),
     speechTranscribeChunk: (req: SpeechTranscribeChunkRequest): Promise<{ text: string }> =>
       ipcRenderer.invoke("speech:transcribeChunk", req),
   };

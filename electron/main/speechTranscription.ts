@@ -1,6 +1,10 @@
 import { app } from "electron";
 import path from "node:path";
 import { env, pipeline } from "@xenova/transformers";
+import {
+  DEFAULT_SPEECH_MODEL_ID,
+  parseSpeechModelId,
+} from "../../shared/speechModels.ts";
 import type { UiLocale } from "../../src/renderer/types.ts";
 
 /**
@@ -13,24 +17,29 @@ import type { UiLocale } from "../../src/renderer/types.ts";
  * the Electron main process (often ~0.5–1.5 GB for base/small). `whisper-small`
  * and `whisper-medium` can crash Electron (SIGTRAP/OOM) on machines with limited RAM.
  *
- * | Model ID              | ~Disk cache | Quality | Speed   |
- * |-----------------------|-------------|---------|---------|
- * | Xenova/whisper-medium | ~750 MB     | Best    | Slow    |
- * | Xenova/whisper-small  | ~150 MB     | Good    | Medium  |
- * | Xenova/whisper-base   | ~75 MB      | OK      | Fast    | ← default
- * | Xenova/whisper-tiny   | ~40 MB      | Poor    | Fastest |
- *
- * Override with env `SPEECH_MODEL_ID`. After changing models, clear `transformers-cache`
- * or pick a new id so old weights are not reused.
+ * Model priority: user preference (IPC) → env `SPEECH_MODEL_ID` → default.
  */
-export const DEFAULT_SPEECH_MODEL_ID = "Xenova/whisper-base";
+export { DEFAULT_SPEECH_MODEL_ID };
 
 let transcriberPromise: ReturnType<typeof createTranscriber> | null = null;
 let loadedModelId: string | null = null;
+let userSelectedModelId: string | null = null;
 
 function resolveSpeechModelId(): string {
+  if (userSelectedModelId) return userSelectedModelId;
   const fromEnv = process.env.SPEECH_MODEL_ID?.trim();
-  return fromEnv || DEFAULT_SPEECH_MODEL_ID;
+  if (fromEnv && parseSpeechModelId(fromEnv) === fromEnv) return fromEnv;
+  return DEFAULT_SPEECH_MODEL_ID;
+}
+
+export function setSpeechModelId(modelId: string): void {
+  const normalized = parseSpeechModelId(modelId);
+  if (userSelectedModelId === normalized) return;
+  userSelectedModelId = normalized;
+  if (loadedModelId !== normalized) {
+    transcriberPromise = null;
+    loadedModelId = null;
+  }
 }
 
 async function createTranscriber(modelId: string) {
@@ -43,15 +52,15 @@ function whisperLanguage(locale: UiLocale): string {
   return locale === "pt" ? "portuguese" : "english";
 }
 
-async function getTranscriber() {
-  const modelId = resolveSpeechModelId();
+async function getTranscriber(modelIdOverride?: string) {
+  const modelId = modelIdOverride ? parseSpeechModelId(modelIdOverride) : resolveSpeechModelId();
   if (!transcriberPromise || loadedModelId !== modelId) {
     transcriberPromise = createTranscriber(modelId).catch((error: unknown) => {
       transcriberPromise = null;
       loadedModelId = null;
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `Failed to load speech model "${modelId}". Try SPEECH_MODEL_ID=Xenova/whisper-base or free disk/RAM. ${message}`,
+        `Failed to load speech model "${modelId}". Try Xenova/whisper-base or free disk/RAM. ${message}`,
       );
     });
     loadedModelId = modelId;
@@ -63,16 +72,19 @@ export function getActiveSpeechModelId(): string {
   return resolveSpeechModelId();
 }
 
-export async function ensureSpeechModelLoaded(): Promise<void> {
-  await getTranscriber();
+export async function ensureSpeechModelLoaded(modelId?: string): Promise<void> {
+  if (modelId) setSpeechModelId(modelId);
+  await getTranscriber(modelId);
 }
 
 export async function transcribePcm(
   samples: Float32Array,
   sampleRate: number,
   locale: UiLocale,
+  modelId?: string,
 ): Promise<string> {
-  const transcriber = await getTranscriber();
+  if (modelId) setSpeechModelId(modelId);
+  const transcriber = await getTranscriber(modelId);
   const result = await transcriber(samples, {
     sampling_rate: sampleRate,
     language: whisperLanguage(locale),

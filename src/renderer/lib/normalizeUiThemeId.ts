@@ -20,11 +20,19 @@ function loadBuiltInThemeIds(): string[] {
 
 const BUILT_IN_THEME_IDS = loadBuiltInThemeIds();
 
+const UI_THEME_ID_PATTERN = /^[a-z0-9][a-z0-9-_]*$/;
+
+export function isValidUiThemeIdSlug(id: string): boolean {
+  return id.length > 0 && id.length <= 48 && UI_THEME_ID_PATTERN.test(id);
+}
+
 /** Validates a palette theme id against bundled presets and user custom themes. */
 export function normalizeUiThemeId(id: string | undefined, customThemes: UiThemeV1[] = []): string {
-  if (!id) return DEFAULT_UI_THEME_ID;
+  if (!id || !isValidUiThemeIdSlug(id)) return DEFAULT_UI_THEME_ID;
   if (BUILT_IN_THEME_IDS.includes(id)) return id;
   if (customThemes.some((theme) => theme.id === id)) return id;
+  // Custom themes load from disk separately; keep the slug until the list is available.
+  if (customThemes.length === 0) return id;
   return DEFAULT_UI_THEME_ID;
 }
 

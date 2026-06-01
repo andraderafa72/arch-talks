@@ -9,6 +9,12 @@ import { shutdownAiRuntime, tryBeginAiRuntimeShutdown } from "./main/localAiRunt
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const appIconCandidates = [
+  path.resolve(__dirname, "../public/favicon.ico"),
+  path.resolve(__dirname, "../dist/favicon.ico"),
+];
+const appIconPath = appIconCandidates.find((candidate) => existsSync(candidate));
+
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
 const devPreloadPath = path.resolve(__dirname, "../dist-electron/preload.cjs");
@@ -24,6 +30,7 @@ const createWindow = () => {
     width: 1600,
     height: 900,
     frame: false,
+    ...(appIconPath ? { icon: appIconPath } : {}),
     backgroundColor: "#fefefe",
     webPreferences: {
       preload: preloadPath,

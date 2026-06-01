@@ -11,6 +11,7 @@ import { registerVaultToolIpc } from "./ipc/vaultTool.ts";
 import { registerWorkspaceToolIpc } from "./ipc/workspaceTool.ts";
 import { registerSystemDesignToolIpc } from "./ipc/systemDesignTool.ts";
 import { registerDailyReportIpc } from "./ipc/dailyReportTool.ts";
+import { registerPromptOverridesIpc } from "./ipc/promptOverrides.ts";
 import { registerSpeechIpc } from "./ipc/speech.ts";
 
 export function registerAllIpc(): void {
@@ -27,5 +28,6 @@ export function registerAllIpc(): void {
   registerSystemDesignToolIpc();
   registerVaultToolIpc();
   registerVaultSkillsIpc();
+  registerPromptOverridesIpc();
   registerDailyReportIpc();
 }

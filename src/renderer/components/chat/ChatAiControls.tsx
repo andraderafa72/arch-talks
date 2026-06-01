@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { ChatThinkingIndicator } from "@/components/chat/ChatThinkingIndicator";
 import { MentionSuggestionsPopover } from "@/components/chat/MentionSuggestionsPopover";
 import type { ChatSystemTone } from "@/types";
 import type { LocalAiModelOption, LocalAiProviderOption, LocalAiSelection } from "@/types/electron-api";
@@ -251,6 +252,7 @@ export function ChatAiControls({
 
   return (
     <div className="flex flex-col gap-2">
+      {loading ? <ChatThinkingIndicator locale={locale} /> : null}
       <div className="relative">
         <textarea
           ref={textareaRef}

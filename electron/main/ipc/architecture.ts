@@ -16,6 +16,11 @@ import {
   readTemplatesJson,
   writeConversationsJson,
   writeTemplatesJson,
+  listUiThemeFiles,
+  writeUiThemeFile,
+  deleteUiThemeFile,
+  deleteDocument,
+  migrateEmbeddedCustomThemes,
 } from "../../architectureFileIo.ts";
 import { isItemsDocument } from "../validators.ts";
 
@@ -35,6 +40,20 @@ export function registerArchitectureIpc(): void {
       throw new Error("Invalid templates payload");
     }
     return writeTemplatesJson(doc);
+  });
+
+  ipcMain.handle("architecture:listUiThemes", () => listUiThemeFiles());
+
+  ipcMain.handle("architecture:writeUiTheme", (_evt, theme: unknown) => writeUiThemeFile(theme));
+
+  ipcMain.handle("architecture:deleteUiTheme", (_evt, id: unknown) => {
+    if (typeof id !== "string" || !id.trim()) throw new Error("Invalid theme id");
+    return deleteUiThemeFile(id.trim());
+  });
+
+  ipcMain.handle("architecture:migrateEmbeddedUiThemes", (_evt, themes: unknown) => {
+    if (!Array.isArray(themes)) throw new Error("Invalid themes payload");
+    return migrateEmbeddedCustomThemes(themes);
   });
 
   ipcMain.handle("architecture:getDataDir", () => ensureArchitectureDataDir());
@@ -62,6 +81,15 @@ export function registerArchitectureIpc(): void {
       throw new Error("Invalid document files payload");
     }
     return writeDocumentFiles(documentId, files);
+  });
+  ipcMain.handle("document:delete", (_evt, payload: unknown) => {
+    if (!payload || typeof payload !== "object") throw new Error("Invalid payload");
+    const { documentId, deleteExternalRoot } = payload as {
+      documentId?: string;
+      deleteExternalRoot?: boolean;
+    };
+    if (typeof documentId !== "string" || !documentId.trim()) throw new Error("Invalid document id");
+    return deleteDocument(documentId.trim(), { deleteExternalRoot: Boolean(deleteExternalRoot) });
   });
   ipcMain.handle("chat:load", (_evt, payload: unknown) => {
     if (!payload || typeof payload !== "object") throw new Error("Invalid payload");

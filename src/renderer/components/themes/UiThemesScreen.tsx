@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ThemeJsonEditor } from "@/components/themes/ThemeJsonEditor";
+import { ThemeNamePromptDialog } from "@/components/themes/ThemeNamePromptDialog";
 import { Button } from "@/components/ui/button";
+import { getKnownBuiltInThemeIds } from "@/lib/normalizeUiThemeId";
 import { listThemes } from "@/lib/themeRegistry";
 import { themesStrings } from "@/lib/uiCopy";
 import { useEditorStore } from "@/state/store";
@@ -10,6 +12,14 @@ import { parseUiTheme, type UiThemeV1 } from "@/types/uiTheme";
 type UiThemesScreenProps = {
   locale: UiLocale;
 };
+
+function themeToEditorJson(theme: UiThemeV1): string {
+  if (theme.builtIn) {
+    return JSON.stringify(theme, null, 2);
+  }
+  const { builtIn: _builtIn, ...editable } = theme;
+  return JSON.stringify(editable, null, 2);
+}
 
 export function UiThemesScreen({ locale }: UiThemesScreenProps) {
   const t = themesStrings(locale);
@@ -26,25 +36,41 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
   const [jsonText, setJsonText] = useState("");
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const loadedIdRef = useRef<string | null>(null);
 
   const selectedTheme = allThemes.find((th) => th.id === selectedId) ?? allThemes[0];
 
   const loadEditorForTheme = useCallback((theme: UiThemeV1) => {
     setSelectedId(theme.id);
-    setJsonText(JSON.stringify(theme, null, 2));
+    setJsonText(themeToEditorJson(theme));
     setParseErrors([]);
+    loadedIdRef.current = theme.id;
   }, []);
 
-  const handleDuplicate = () => {
+  const confirmDuplicate = async (name: string) => {
     if (!selectedTheme) return;
-    const name = window.prompt(t.duplicatePrompt, `${selectedTheme.name} copy`);
-    if (!name?.trim()) return;
-    const created = duplicateUiTheme(selectedTheme.id, name.trim());
-    if (created) loadEditorForTheme(created);
+    setDuplicating(true);
+    setParseErrors([]);
+    try {
+      const created = await duplicateUiTheme(selectedTheme.id, name);
+      if (!created) {
+        setParseErrors([t.duplicateFailed]);
+        return;
+      }
+      setDuplicateOpen(false);
+      loadEditorForTheme(created);
+    } catch (error) {
+      console.error(error);
+      setParseErrors([error instanceof Error ? error.message : t.duplicateFailed]);
+    } finally {
+      setDuplicating(false);
+    }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
     try {
       const raw = JSON.parse(jsonText) as unknown;
@@ -53,9 +79,21 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
         setParseErrors(result.errors);
         return;
       }
-      saveCustomUiTheme(result.theme);
+      if (getKnownBuiltInThemeIds().includes(result.theme.id)) {
+        setParseErrors([t.reservedThemeId]);
+        return;
+      }
+      const previousId = loadedIdRef.current ?? selectedId;
+      const saved = await saveCustomUiTheme(result.theme, {
+        previousId: previousId !== result.theme.id ? previousId : undefined,
+      });
+      if (!saved) {
+        setParseErrors([t.saveFailed]);
+        return;
+      }
       setParseErrors([]);
       setSelectedId(result.theme.id);
+      loadedIdRef.current = result.theme.id;
     } catch {
       setParseErrors([t.validationError]);
     } finally {
@@ -63,20 +101,20 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedTheme || selectedTheme.builtIn) {
       window.alert(t.cannotDeleteBuiltIn);
       return;
     }
     if (!window.confirm(`Delete theme "${selectedTheme.name}"?`)) return;
-    deleteCustomUiTheme(selectedTheme.id);
+    await deleteCustomUiTheme(selectedTheme.id);
     const next = listThemes(useEditorStore.getState().customUiThemes)[0];
     if (next) loadEditorForTheme(next);
   };
 
   const handleExport = () => {
     if (!selectedTheme) return;
-    const blob = new Blob([JSON.stringify(selectedTheme, null, 2)], { type: "application/json" });
+    const blob = new Blob([themeToEditorJson(selectedTheme)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -88,28 +126,46 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
   const handleImportFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const raw = JSON.parse(String(reader.result)) as unknown;
-        const result = parseUiTheme(raw);
-        if (!result.ok) {
-          setParseErrors(result.errors);
-          return;
+      void (async () => {
+        try {
+          const raw = JSON.parse(String(reader.result)) as unknown;
+          const result = parseUiTheme(raw);
+          if (!result.ok) {
+            setParseErrors(result.errors);
+            return;
+          }
+          if (getKnownBuiltInThemeIds().includes(result.theme.id)) {
+            setParseErrors([t.reservedThemeId]);
+            return;
+          }
+          setJsonText(JSON.stringify(result.theme, null, 2));
+          setParseErrors([]);
+          const saved = await saveCustomUiTheme(result.theme);
+          if (!saved) {
+            setParseErrors([t.saveFailed]);
+            return;
+          }
+          setSelectedId(result.theme.id);
+          loadedIdRef.current = result.theme.id;
+        } catch {
+          setParseErrors([t.validationError]);
         }
-        setJsonText(JSON.stringify(result.theme, null, 2));
-        setParseErrors([]);
-        saveCustomUiTheme(result.theme);
-        setSelectedId(result.theme.id);
-      } catch {
-        setParseErrors([t.validationError]);
-      }
+      })();
     };
     reader.readAsText(file);
   };
 
   useEffect(() => {
+    if (loadedIdRef.current === selectedId) return;
     const theme = allThemes.find((th) => th.id === selectedId);
     if (theme) loadEditorForTheme(theme);
   }, [selectedId, allThemes, loadEditorForTheme]);
+
+  useEffect(() => {
+    if (loadedIdRef.current !== null) return;
+    const initial = allThemes.find((th) => th.id === uiThemeId) ?? allThemes[0];
+    if (initial) loadEditorForTheme(initial);
+  }, [allThemes, loadEditorForTheme, uiThemeId]);
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-[var(--ui-shell-bg)] p-6 text-[var(--ui-shell-fg)]">
@@ -134,7 +190,7 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
                         ? "border-[var(--ui-file-tree-active-border)] bg-[var(--ui-file-tree-active-bg)]"
                         : "border-transparent hover:bg-[var(--ui-file-tree-hover-bg)]"
                     }`}
-                    onClick={() => loadEditorForTheme(theme)}
+                    onClick={() => setSelectedId(theme.id)}
                   >
                     <div className="font-medium">{theme.name}</div>
                     <div className="text-xs text-[var(--ui-muted-fg)]">
@@ -150,8 +206,14 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
             <Button type="button" variant="secondary" size="sm" onClick={() => setUiThemeId(selectedId)}>
               {t.selectTheme}
             </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={handleDuplicate}>
-              {t.duplicate}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!selectedTheme || duplicating}
+              onClick={() => setDuplicateOpen(true)}
+            >
+              {duplicating ? t.duplicating : t.duplicate}
             </Button>
             <Button type="button" variant="secondary" size="sm" onClick={handleExport} disabled={!selectedTheme}>
               {t.exportJson}
@@ -179,7 +241,7 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
               type="button"
               variant="destructive"
               size="sm"
-              onClick={handleDelete}
+              onClick={() => void handleDelete()}
               disabled={selectedTheme?.builtIn}
             >
               {t.delete}
@@ -204,7 +266,7 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
                 setJsonText(next);
                 setParseErrors([]);
               }}
-              onSave={selectedTheme?.builtIn ? undefined : handleSave}
+              onSave={selectedTheme?.builtIn ? undefined : () => void handleSave()}
             />
           </div>
           {parseErrors.length > 0 ? (
@@ -216,13 +278,26 @@ export function UiThemesScreen({ locale }: UiThemesScreenProps) {
           ) : null}
           <Button
             className="mt-3 w-full sm:w-auto"
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={saving || selectedTheme?.builtIn}
           >
             {saving ? t.saving : t.save}
           </Button>
         </div>
       </div>
+
+      <ThemeNamePromptDialog
+        open={duplicateOpen}
+        title={t.duplicate}
+        label={t.duplicatePrompt}
+        initialName={selectedTheme ? `${selectedTheme.name} copy` : ""}
+        confirmLabel={t.duplicateConfirm}
+        cancelLabel={t.duplicateCancel}
+        onCancel={() => {
+          if (!duplicating) setDuplicateOpen(false);
+        }}
+        onConfirm={(name) => void confirmDuplicate(name)}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   activeTrackerElapsedMs,
   elapsedMsToHours,
   formatElapsedDuration,
+  formatHoursLabel,
   formatQuarterHours,
   MIN_TRACKED_HOURS,
   parseDurationInputToMs,
@@ -60,5 +61,11 @@ describe("dailyReportTime", () => {
     assert.equal(formatQuarterHours(0.5), "30m");
     assert.equal(formatQuarterHours(1), "1h");
     assert.equal(formatQuarterHours(1.25), "1h 15m");
+  });
+
+  it("formats hours as Xh YYm labels", () => {
+    assert.equal(formatHoursLabel(0.25), "0h 15m");
+    assert.equal(formatHoursLabel(1.5), "1h 30m");
+    assert.equal(formatHoursLabel(2.083), "2h 05m");
   });
 });

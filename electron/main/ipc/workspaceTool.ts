@@ -1,8 +1,9 @@
 import { ipcMain } from "electron";
 import { partitionChatReply } from "../../structuredPatchFromReply.ts";
-import { buildWorkspaceChatSystemPrompt } from "../chatPrompts.ts";
+import { buildWorkspaceChatPromptSegments, buildWorkspaceChatSystemPrompt } from "../chatPrompts.ts";
 import { runLocalAiChat } from "../localAiRuntime.ts";
 import type { LocalAiSelection } from "../../../src/renderer/types/electron-api.ts";
+import { resolveSystemPrompt } from "../resolveSystemPrompt.ts";
 
 export function registerWorkspaceToolIpc(): void {
   ipcMain.removeHandler("workspaceChat:send");
@@ -10,8 +11,9 @@ export function registerWorkspaceToolIpc(): void {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       throw new Error("Invalid workspaceChat:send payload");
     }
-    const { sessionKey, activeFile, files, prompt, aiSelection, streamId } = payload as {
+    const { sessionKey, documentId, activeFile, files, prompt, aiSelection, streamId } = payload as {
       sessionKey: string;
+      documentId?: string;
       activeFile: string;
       files: Record<string, string>;
       prompt: string;
@@ -33,7 +35,14 @@ export function registerWorkspaceToolIpc(): void {
         ? { sender: event.sender, streamId: streamId.trim() }
         : undefined;
 
-    const systemPrompt = buildWorkspaceChatSystemPrompt(activeFile, files);
+    const defaultPrompt = buildWorkspaceChatSystemPrompt(activeFile, files);
+    const systemPrompt = await resolveSystemPrompt({
+      documentId,
+      promptId: "technical_document.chat",
+      defaultPrompt,
+      segments: buildWorkspaceChatPromptSegments(activeFile, files),
+      placeholders: { activeFile },
+    });
     const reply = await runLocalAiChat({ sessionKey, systemPrompt, prompt, selection: aiSelection, stream });
     const { reply: cleanReply, patch } = partitionChatReply(reply, activeFile);
     return { reply: cleanReply, patch };

@@ -286,7 +286,7 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
   const [activeTimeTracker, setActiveTimeTracker] = useState<DailyReportActiveTimeTracker | null>(
     null,
   );
-  const [timerTick, setTimerTick] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const documentRef = useRef<DailyReportDocument | null>(null);
   const activeTimeTrackerRef = useRef<DailyReportActiveTimeTracker | null>(null);
   const savedSnapshotRef = useRef("");
@@ -316,9 +316,8 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
 
   const elapsedMs = useMemo(() => {
     if (!activeTimeTracker) return 0;
-    void timerTick;
-    return activeTrackerElapsedMs(activeTimeTracker);
-  }, [activeTimeTracker, timerTick]);
+    return activeTrackerElapsedMs(activeTimeTracker, nowMs);
+  }, [activeTimeTracker, nowMs]);
 
   const timeLogs = useMemo(() => {
     const logs = document?.timeLogs ?? [];
@@ -327,8 +326,31 @@ export function DailyReportProvider({ children }: DailyReportProviderProps) {
 
   useEffect(() => {
     if (!activeTimeTracker || activeTimeTracker.paused) return;
-    const id = window.setInterval(() => setTimerTick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
+
+    let rafId = 0;
+    let lastSecond = -1;
+
+    const syncNow = () => setNowMs(Date.now());
+    const tick = () => {
+      const now = Date.now();
+      const second = Math.floor(now / 1000);
+      if (second !== lastSecond) {
+        lastSecond = second;
+        setNowMs(now);
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    syncNow();
+    rafId = window.requestAnimationFrame(tick);
+    window.addEventListener("focus", syncNow);
+    window.document.addEventListener("visibilitychange", syncNow);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("focus", syncNow);
+      window.document.removeEventListener("visibilitychange", syncNow);
+    };
   }, [activeTimeTracker?.startedAt, activeTimeTracker?.paused]);
 
   const setActiveChatTabId = useCallback((tabId: string) => {

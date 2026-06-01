@@ -5,8 +5,10 @@ import { PreviewPanel } from "@/components/preview/PreviewPanel";
 import { SystemContextOverlay } from "@/components/system-design/SystemContextOverlay";
 import { VaultCategoryGate } from "@/components/vault/VaultCategoryGate";
 import { VaultPlaygroundDrawer } from "@/components/vault/VaultPlaygroundDrawer";
+import { WorkspaceSettingsModal } from "@/components/workspace/WorkspaceSettingsModal";
 import { Button } from "@/components/ui/button";
 import { VaultPlaygroundProvider } from "@/contexts/VaultPlaygroundContext";
+import { useWindowTabsContext } from "@/contexts/WindowTabsContext";
 import { useWorkspaceConversationContext } from "@/contexts/WorkspaceConversationContext";
 import { useWorkspaceLayoutContext } from "@/contexts/WorkspaceLayoutContext";
 import { isElectronApp } from "@/lib/electronBridge";
@@ -53,7 +55,6 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
     setActiveChatAiSelection,
     vaultAiDiffReview,
     vaultAppliedUndo,
-    pendingVaultPaths,
     pendingReviewByPath,
     conversationKind,
     vaultFileTreeFilter,
@@ -63,6 +64,8 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
   const vaultName = vaultConversation?.vaultName ?? vaultConversation?.title;
   const locale = useEditorStore((state) => state.locale);
   const [vaultCategoryCheckDone, setVaultCategoryCheckDone] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { activeTabId, closeTab, goHome } = useWindowTabsContext();
 
   useEffect(() => {
     if (vaultConversation?.kind !== "vault" || !vaultConversation.vaultRootPath) {
@@ -109,14 +112,13 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
 
   const needsSystemContext =
     conversationKind === "system_design" &&
-    !Object.hasOwn(currentFiles, "SYSTEM.md");
+    !vaultConversation?.systemContextCompletedAt;
 
   if (needsSystemContext) {
     return (
       <SystemContextOverlay
         documentId={activeConversationId}
         locale={locale}
-        scanFolderPath={vaultConversation?.scanFolderPath}
         aiSelection={activeChatAiSelection}
         onAiSelectionChange={setActiveChatAiSelection}
       />
@@ -147,6 +149,7 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
           onDeletePath={removeConversationPath}
           onMovePath={renameConversationPath}
           onOpenFolder={openChatFolderInExplorer}
+          onOpenSettings={() => setSettingsOpen(true)}
           isElectron={isElectron}
         />
         <div
@@ -225,6 +228,21 @@ export function WorkspacePage({ theme, onGoHome }: WorkspacePageProps) {
           />
         )}
       </div>
+      {settingsOpen && vaultConversation ? (
+        <WorkspaceSettingsModal
+          conversation={vaultConversation}
+          activeFile={activeFile}
+          files={currentFiles}
+          locale={locale}
+          onClose={() => setSettingsOpen(false)}
+          onDeleted={() => {
+            setSettingsOpen(false);
+            closeTab(activeTabId);
+            goHome();
+            onGoHome();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

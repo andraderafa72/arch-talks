@@ -19,9 +19,11 @@ export function topBarStrings(locale: UiLocale) {
       applyPatch: "Aplicar patch",
       languageSelect: "Idioma da interface",
       projectPickerLabel: "Selecionar projeto",
+      selectWorkspace: "Selecionar workspace",
       workspaces: "Espaços de trabalho",
       configuration: "Configuração",
       integrations: "Integrações",
+      settings: "Definições",
       workspaceEditor: "Editor / Chat",
       workspaceEditorDesc: "Abrir o espaço de trabalho ativo",
       latexWorkspaces: "Espaços LaTeX",
@@ -35,6 +37,7 @@ export function topBarStrings(locale: UiLocale) {
       appearance: "Aparência",
       uiThemes: "Temas da interface",
       manageThemes: "Gerir temas…",
+      selectColorTheme: "Selecionar tema de cores",
       lightTheme: "Tema claro",
       darkTheme: "Tema escuro",
       language: "Idioma",
@@ -61,9 +64,11 @@ export function topBarStrings(locale: UiLocale) {
     applyPatch: "Apply Patch",
     languageSelect: "Interface language",
     projectPickerLabel: "Select project",
+    selectWorkspace: "Select workspace",
     workspaces: "Workspaces",
     configuration: "Configuration",
     integrations: "Integrations",
+    settings: "Settings",
     workspaceEditor: "Editor / Chat",
     workspaceEditorDesc: "Open the active workspace",
     latexWorkspaces: "LaTeX workspaces",
@@ -77,6 +82,7 @@ export function topBarStrings(locale: UiLocale) {
     appearance: "Appearance",
     uiThemes: "UI themes",
     manageThemes: "Manage themes…",
+    selectColorTheme: "Select color theme",
     lightTheme: "Light theme",
     darkTheme: "Dark theme",
     language: "Language",
@@ -322,6 +328,69 @@ export function skillsStrings(locale: UiLocale) {
   };
 }
 
+export function settingsStrings(locale: UiLocale) {
+  if (locale === "pt") {
+    return {
+      pageTitle: "Definições",
+      pageSubtitle: "Preferências da aplicação e ferramentas.",
+      navGeneral: "Geral",
+      navSystemPrompts: "Prompts do sistema",
+      navSystemDesign: "Design de sistema",
+      navLatex: "LaTeX",
+      navVault: "Cofre",
+      navMarkdownPdf: "Markdown para PDF",
+      navUmlRender: "Renderizar UML",
+      navLatexTectonic: "Renderizar LaTeX",
+      navDailyReports: "Relatórios diários",
+      transcriptionModel: "Modelo de transcrição",
+      transcriptionModelDesc:
+        "Modelo Whisper local usado pela entrada por voz no chat. A primeira utilização pode transferir pesos para disco.",
+      transcriptionElectronNote: "A entrada por voz requer a app desktop Electron.",
+      placeholderTitle: "Definições em breve",
+      placeholderBody: "As definições específicas desta ferramenta serão adicionadas aqui.",
+      systemDesignNote:
+        "Pastas e referências por espaço de trabalho continuam disponíveis no modal de definições do chat.",
+      systemPromptsDescription:
+        "Overrides globais aplicados a todos os espaços de trabalho antes dos overrides específicos de cada workspace.",
+      systemPromptsGlobalNote:
+        "A ordem de resolução é: default, override global e override da workspace. Se um override global de prompt completo estiver ativo, segmentos da workspace não são aplicados; use um prompt completo na workspace ou desative o global.",
+      speechModelTiny: "Tiny (~40 MB, mais rápido)",
+      speechModelBase: "Base (~75 MB, predefinido)",
+      speechModelSmall: "Small (~150 MB, boa qualidade)",
+      speechModelMedium: "Medium (~750 MB, melhor qualidade, muita RAM)",
+    };
+  }
+  return {
+    pageTitle: "Settings",
+    pageSubtitle: "Application and tool preferences.",
+    navGeneral: "General",
+    navSystemPrompts: "System prompts",
+    navSystemDesign: "System design",
+    navLatex: "LaTeX",
+    navVault: "Vault",
+    navMarkdownPdf: "Markdown to PDF",
+    navUmlRender: "Render UML",
+    navLatexTectonic: "Render LaTeX",
+    navDailyReports: "Daily reports",
+    transcriptionModel: "Transcription model",
+    transcriptionModelDesc:
+      "Local Whisper model used by voice input in chat. First use may download weights to disk.",
+    transcriptionElectronNote: "Voice input requires the Electron desktop app.",
+    placeholderTitle: "Settings coming soon",
+    placeholderBody: "Tool-specific settings for this section will be added here.",
+    systemDesignNote:
+      "Per-workspace folders and references remain available from the chat settings modal.",
+    systemPromptsDescription:
+      "Global overrides applied to every workspace before workspace-specific overrides.",
+    systemPromptsGlobalNote:
+      "Resolution order is: default, global override, then workspace override. If a global full-prompt override is active, workspace segment overrides are not applied; use a workspace full prompt or disable the global override.",
+    speechModelTiny: "Tiny (~40 MB, fastest)",
+    speechModelBase: "Base (~75 MB, default)",
+    speechModelSmall: "Small (~150 MB, good quality)",
+    speechModelMedium: "Medium (~750 MB, best quality, heavy RAM)",
+  };
+}
+
 export function voiceInputStrings(locale: UiLocale) {
   if (locale === "pt") {
     return {
@@ -455,10 +524,16 @@ export function themesStrings(locale: UiLocale) {
       editorLabel: "JSON do tema",
       newThemeName: "Nome do novo tema",
       duplicatePrompt: "Nome para a cópia do tema",
+      duplicateConfirm: "Criar cópia",
+      duplicateCancel: "Cancelar",
+      duplicating: "A duplicar…",
+      duplicateFailed: "Não foi possível duplicar o tema. Reinicie a app desktop se estiver no browser.",
       validationError: "JSON inválido",
       active: "Ativo",
       cannotDeleteBuiltIn: "Temas incluídos não podem ser eliminados.",
       readOnlyBuiltIn: "Só leitura — duplique para editar",
+      reservedThemeId: "O id não pode coincidir com um tema incluído (default, nord, etc.).",
+      saveFailed: "Falha ao guardar o tema.",
     };
   }
   return {
@@ -476,9 +551,15 @@ export function themesStrings(locale: UiLocale) {
     editorLabel: "Theme JSON",
     newThemeName: "New theme name",
     duplicatePrompt: "Name for the theme copy",
+    duplicateConfirm: "Create copy",
+    duplicateCancel: "Cancel",
+    duplicating: "Duplicating…",
+    duplicateFailed: "Could not duplicate the theme. Restart the desktop app if you are in the browser.",
     validationError: "Invalid JSON",
     active: "Active",
     cannotDeleteBuiltIn: "Built-in themes cannot be deleted.",
     readOnlyBuiltIn: "Read-only — duplicate to edit",
+    reservedThemeId: 'Theme id cannot match a built-in theme (default, nord, etc.).',
+    saveFailed: "Failed to save theme.",
   };
 }

@@ -1,4 +1,5 @@
-import { topBarStrings, skillsStrings } from "@/lib/uiCopy";
+import { topBarStrings, skillsStrings, settingsStrings } from "@/lib/uiCopy";
+import { SETTINGS_SECTION_ROUTES } from "@/components/configuration/settings/settingsRoutes";
 import { workspaceTabTitle } from "@/lib/conversationMeta";
 import type { Conversation, UiLocale } from "@/types";
 
@@ -33,6 +34,11 @@ export function labelForRoute(pathname: string, search: string, locale: UiLocale
   if (pathname === "/themes") return t.themes;
   if (pathname === "/daily-reports") return t.dailyReports;
   if (pathname === "/configuration/integrations") return t.integrations;
+  if (pathname.startsWith("/configuration/settings")) {
+    const section = SETTINGS_SECTION_ROUTES.find((item) => item.path === pathname);
+    if (section) return section.label(locale);
+    return settingsStrings(locale).pageTitle;
+  }
   if (pathname === "/conversations") {
     const kind = new URLSearchParams(search).get("kind");
     if (kind === "system_design") return t.systemDesignWorkspaces;

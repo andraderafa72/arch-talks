@@ -3,9 +3,12 @@ import type { LocalAiSelection } from "../../src/renderer/types/electron-api.ts"
 import type { VaultCategory } from "./archConfig.ts";
 import {
   buildBatchExtractionPrompt,
+  buildBatchExtractionSystemPromptSegments,
   buildBatchExtractionSystemPrompt,
   buildTopicAnalysisPrompt,
+  buildTopicAnalysisSystemPromptSegments,
   buildTopicAnalysisSystemPrompt,
+  buildVaultConversationalPromptSegments,
   buildVaultConversationalPrompt,
 } from "../main/chatPrompts.ts";
 import { runLocalAiChat, vaultChatReplyTimeout, type LocalAiReplyTimeout } from "../main/localAiRuntime.ts";
@@ -28,8 +31,10 @@ import {
 import { localAiSessionHasUserHistory } from "../main/localAiRuntime.ts";
 import { VAULT_INGESTION_MAX_TOPICS } from "./vaultTypes.ts";
 import { validateBatchTopicsMatchPlan, validateVaultPlanMetadata } from "./validateVaultPlanMetadata.ts";
+import { resolveSystemPrompt } from "../main/resolveSystemPrompt.ts";
 
 export type BatchedVaultIngestionContext = {
+  documentId?: string;
   sessionKey: string;
   category: VaultCategory;
   semanticSkills: string;
@@ -97,13 +102,21 @@ async function runTopicAnalysis(ctx: BatchedVaultIngestionContext): Promise<
   | { ok: true; analysis: TopicAnalysis }
   | { ok: false; reply: string; errors: string[] }
 > {
-  const systemPrompt = buildTopicAnalysisSystemPrompt({
+  const promptOptions = {
     category: ctx.category,
     semanticSkills: ctx.semanticSkills,
     planningSkills: ctx.planningSkills,
     structureReport: ctx.structureReport,
     files: ctx.files,
     alreadyGeneratedContext: ctx.alreadyGeneratedContext,
+  };
+  const defaultPrompt = buildTopicAnalysisSystemPrompt(promptOptions);
+  const systemPrompt = await resolveSystemPrompt({
+    documentId: ctx.documentId,
+    promptId: "vault.topic_analysis",
+    defaultPrompt,
+    segments: buildTopicAnalysisSystemPromptSegments(promptOptions),
+    placeholders: { structureReport: ctx.structureReport },
   });
 
   const userPrompt = buildTopicAnalysisPrompt({
@@ -148,13 +161,21 @@ async function runPlanExtraction(
   | { ok: true; plan: VaultIngestionPlan; warnings: string[] }
   | { ok: false; errors: string[]; warnings: string[] }
 > {
-  const systemPrompt = buildBatchExtractionSystemPrompt({
+  const promptOptions = {
     category: ctx.category,
     planningSkills: ctx.planningSkills,
     structureReport: ctx.structureReport,
     activeFile: ctx.activeFile,
     files: ctx.files,
     alreadyGeneratedContext: ctx.alreadyGeneratedContext,
+  };
+  const defaultPrompt = buildBatchExtractionSystemPrompt(promptOptions);
+  const systemPrompt = await resolveSystemPrompt({
+    documentId: ctx.documentId,
+    promptId: "vault.batch_extraction",
+    defaultPrompt,
+    segments: buildBatchExtractionSystemPromptSegments(promptOptions),
+    placeholders: { activeFile: ctx.activeFile, structureReport: ctx.structureReport },
   });
 
   const userPrompt = buildBatchExtractionPrompt({
@@ -304,7 +325,7 @@ export async function runBatchedVaultIngestion(
 }
 
 export async function runConversationalVaultChat(ctx: BatchedVaultIngestionContext): Promise<{ reply: string }> {
-  const systemPrompt = buildVaultConversationalPrompt({
+  const promptOptions = {
     category: ctx.category,
     semanticSkills: ctx.semanticSkills,
     planningSkills: ctx.planningSkills,
@@ -312,6 +333,14 @@ export async function runConversationalVaultChat(ctx: BatchedVaultIngestionConte
     activeFile: ctx.activeFile,
     files: ctx.files,
     referenceExcerpt: ctx.referenceExcerpt,
+  };
+  const defaultPrompt = buildVaultConversationalPrompt(promptOptions);
+  const systemPrompt = await resolveSystemPrompt({
+    documentId: ctx.documentId,
+    promptId: "vault.conversational",
+    defaultPrompt,
+    segments: buildVaultConversationalPromptSegments(promptOptions),
+    placeholders: { activeFile: ctx.activeFile, structureReport: ctx.structureReport },
   });
 
   const turnPrompt =

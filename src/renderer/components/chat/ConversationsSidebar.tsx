@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { ChevronDown, ChevronRight, FilePlus, FolderOpen, FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FilePlus, FolderOpen, FolderPlus, Pencil, Settings, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { buildFileTree, collectFolderPaths } from "@/lib/fileTreeUtils";
@@ -440,6 +440,7 @@ type FilesSidebarProps = {
   onDeletePath: (path: string) => void;
   onMovePath: (from: string, to: string) => void;
   onOpenFolder?: () => void;
+  onOpenSettings?: () => void;
   isElectron: boolean;
 };
 
@@ -458,6 +459,7 @@ export function ConversationsSidebar({
   onDeletePath,
   onMovePath,
   onOpenFolder,
+  onOpenSettings,
   isElectron,
   pendingReviewByPath,
   showVaultFileTreeFilter = false,
@@ -803,19 +805,32 @@ export function ConversationsSidebar({
         clearSelection();
       }}
     >
-      <div className="mb-2 flex items-center justify-between gap-1">
+      <div className="mb-2 flex items-center justify-start gap-1">
         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--ui-file-tree-muted-fg)]">Files</div>
         {isElectron && onOpenFolder ? (
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className={iconBtnClass()}
+            className={iconBtnClass("ml-auto")}
             title="Abrir pasta deste chat no explorador"
             aria-label="Abrir pasta deste chat no explorador"
             onClick={onOpenFolder}
           >
             <FolderOpen className="h-4 w-4" aria-hidden />
+          </Button>
+        ) : null}
+        {onOpenSettings ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={iconBtnClass()}
+            title="Definições da workspace"
+            aria-label="Definições da workspace"
+            onClick={onOpenSettings}
+          >
+            <Settings className="h-4 w-4" aria-hidden />
           </Button>
         ) : null}
       </div>

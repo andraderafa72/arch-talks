@@ -12,7 +12,12 @@ import {
   chatUserBubbleClass,
 } from "@/lib/chatThemeClasses";
 import { chatTabStreamKey } from "@/lib/chatTabStream";
-import { isLocalAgentSelection, localAgentFolderScanHint } from "@/lib/localAgentSelection";
+import {
+  isLocalAgentSelection,
+  localAgentFolderScanHint,
+  resolveEffectiveAiSelection,
+} from "@/lib/localAgentSelection";
+import { getEffectiveScanFolderPath } from "@/lib/systemDesignFolders";
 import { isAbortError, stoppedAssistantContent, stoppedSystemContent } from "@/lib/localAiErrors";
 import { createSystemMessage, resolveSystemTone, systemMarkdownVariant } from "@/lib/chatSystemMessage";
 import { useEditorStore } from "@/state/store";
@@ -22,13 +27,12 @@ import type { LocalAiProviderOption, LocalAiSelection } from "@/types/electron-a
 type SystemContextOverlayProps = {
   documentId: string;
   locale: UiLocale;
-  scanFolderPath?: string;
   aiSelection?: LocalAiSelection;
   onAiSelectionChange: (selection: LocalAiSelection | undefined) => void;
 };
 
 const chatMarkdownClass =
-  "prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1";
+  "chat-markdown min-w-0 max-w-full break-words text-sm [overflow-wrap:anywhere] [&_pre]:my-2 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:font-mono [&_pre_code]:text-inherit";
 
 type ProvidersLoadState = "loading" | "loaded" | "unavailable";
 
@@ -62,12 +66,15 @@ Send your first message whenever you are ready.`;
 export function SystemContextOverlay({
   documentId,
   locale,
-  scanFolderPath,
   aiSelection,
   onAiSelectionChange,
 }: SystemContextOverlayProps) {
   const completeSystemContext = useEditorStore((s) => s.completeSystemContext);
   const setSystemDesignScanFolder = useEditorStore((s) => s.setSystemDesignScanFolder);
+  const conversation = useEditorStore((s) => s.conversations[documentId]);
+  const effectiveScanFolderPath = getEffectiveScanFolderPath(conversation);
+  const systemPromptRevision = conversation?.systemPromptRevision ?? 0;
+  const globalPromptRevision = useEditorStore((s) => s.globalPromptRevision);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [providers, setProviders] = useState<LocalAiProviderOption[]>([]);
   const [providersLoadState, setProvidersLoadState] = useState<ProvidersLoadState>(() =>
@@ -76,6 +83,7 @@ export function SystemContextOverlay({
   const [finishing, setFinishing] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const sessionKey = `system-context:${documentId}`;
+  const promptSessionKey = `${sessionKey}:g${globalPromptRevision}:p${systemPromptRevision}`;
   const streamTabKey = chatTabStreamKey(documentId, sessionKey);
   const streamState = useEditorStore((s) => s.chatStreams[streamTabKey]);
   const setChatTabStream = useEditorStore((s) => s.setChatTabStream);
@@ -110,7 +118,7 @@ export function SystemContextOverlay({
     if (!api?.pickDirectory || !canScanFolder) return;
     const result = await api.pickDirectory();
     if (result.ok) {
-      setSystemDesignScanFolder(result.path);
+      setSystemDesignScanFolder(documentId, result.path);
       setMessages((prev) => [
         ...prev,
         createSystemMessage(
@@ -121,7 +129,7 @@ export function SystemContextOverlay({
         ),
       ]);
     }
-  }, [canScanFolder, locale, setSystemDesignScanFolder]);
+  }, [canScanFolder, documentId, locale, setSystemDesignScanFolder]);
 
   const handleSubmit = useCallback(
     async (promptText: string) => {
@@ -158,10 +166,14 @@ export function SystemContextOverlay({
 
       try {
         setChatLoading(true);
+        const conversation = useEditorStore.getState().conversations[documentId];
+        const scanFolderPath = getEffectiveScanFolderPath(conversation);
+        const effectiveAiSelection = resolveEffectiveAiSelection(aiSelection, providers);
         const response = await api.systemDesignContextChatSend({
-          sessionKey,
+          sessionKey: promptSessionKey,
+          documentId,
           prompt: promptText,
-          aiSelection,
+          aiSelection: effectiveAiSelection,
           streamId,
           scanFolderPath,
         });
@@ -208,7 +220,9 @@ export function SystemContextOverlay({
       documentId,
       locale,
       patchChatTabStreamText,
-      scanFolderPath,
+      documentId,
+      providers,
+      promptSessionKey,
       sessionKey,
       setChatTabStream,
       streamTabKey,
@@ -220,22 +234,46 @@ export function SystemContextOverlay({
     if (!api?.systemDesignMaterializeSystemMd || !hasUserMessage) return;
     setFinishing(true);
     const streamId = crypto.randomUUID();
+    setChatTabStream(documentId, sessionKey, { streamId, text: "" });
+    const unsub = api.subscribeAiChatStream?.((payload) => {
+      if (payload.streamId !== streamId) return;
+      patchChatTabStreamText(documentId, sessionKey, streamId, payload.text);
+    });
     try {
+      const conversation = useEditorStore.getState().conversations[documentId];
+      const scanFolderPath = getEffectiveScanFolderPath(conversation);
+      const effectiveAiSelection = resolveEffectiveAiSelection(aiSelection, providers);
       const response = await api.systemDesignMaterializeSystemMd({
-        sessionKey,
+        sessionKey: promptSessionKey,
+        documentId,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        aiSelection,
+        aiSelection: effectiveAiSelection,
         streamId,
         scanFolderPath,
+        files: conversation?.files ?? {},
       });
-      completeSystemContext(documentId, response.systemMd);
+      completeSystemContext(documentId, response, messages);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       setMessages((prev) => [...prev, createSystemMessage(msg, "error")]);
     } finally {
+      unsub?.();
+      clearChatTabStream(documentId, sessionKey);
       setFinishing(false);
     }
-  }, [aiSelection, completeSystemContext, documentId, hasUserMessage, messages, scanFolderPath, sessionKey]);
+  }, [
+    aiSelection,
+    clearChatTabStream,
+    completeSystemContext,
+    documentId,
+    hasUserMessage,
+    messages,
+    patchChatTabStreamText,
+    providers,
+    promptSessionKey,
+    sessionKey,
+    setChatTabStream,
+  ]);
 
   const title = locale === "pt" ? "Definir contexto do sistema" : "Define system context";
   const subtitle =
@@ -246,15 +284,15 @@ export function SystemContextOverlay({
   const streamingText = streamState?.text ?? "";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fefefe] dark:bg-zinc-950">
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--ui-shell-bg)]">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--ui-panel-border)] px-6 py-4">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{title}</h1>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{subtitle}</p>
+          <h1 className="text-lg font-semibold text-[var(--ui-shell-fg)]">{title}</h1>
+          <p className="mt-1 text-sm text-[var(--ui-muted-fg)]">{subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
           {providersLoading ? (
-            <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="max-w-xs text-xs text-[var(--ui-muted-fg)]">
               {locale === "pt" ? "A carregar agentes de IA…" : "Loading AI providers…"}
             </p>
           ) : canScanFolder ? (
@@ -263,7 +301,7 @@ export function SystemContextOverlay({
               {locale === "pt" ? "Analisar código existente…" : "Analyze existing codebase…"}
             </Button>
           ) : providersLoadState === "loaded" ? (
-            <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">{localAgentFolderScanHint(locale)}</p>
+            <p className="max-w-xs text-xs text-[var(--ui-muted-fg)]">{localAgentFolderScanHint(locale)}</p>
           ) : null}
           <Button
             type="button"
@@ -281,22 +319,24 @@ export function SystemContextOverlay({
         </div>
       </header>
 
-      {scanFolderPath ? (
-        <div className="shrink-0 border-b border-zinc-100 bg-zinc-50 px-6 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400">
+      {effectiveScanFolderPath ? (
+        <div className="shrink-0 border-b border-[var(--ui-panel-border)] bg-[var(--ui-header-bg)] px-6 py-2 text-xs text-[var(--ui-muted-fg)]">
           {locale === "pt" ? "Pasta de análise:" : "Scan folder:"}{" "}
-          <code className="font-mono">{scanFolderPath}</code>
+          <code className="font-mono text-[var(--ui-shell-fg)]">{effectiveScanFolderPath}</code>
         </div>
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-4">
           {messages.length === 0 && !chatLoading ? (
-            <div className="flex min-h-[12rem] flex-col justify-center rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 px-5 py-6 dark:border-zinc-700 dark:bg-zinc-900/40">
-              <ChatMessageMarkdown
-                content={systemContextEmptyGuide(locale, providersLoading)}
-                variant="assistant"
-                className={chatMarkdownClass}
-              />
+            <div className="flex justify-center">
+              <div className={`${chatSystemBubbleClass("info")} w-full rounded-md px-3 py-2 text-sm`}>
+                <ChatMessageMarkdown
+                  content={systemContextEmptyGuide(locale, providersLoading)}
+                  variant="system-info"
+                  className={chatMarkdownClass}
+                />
+              </div>
             </div>
           ) : null}
           {messages.map((message) => {
@@ -336,7 +376,7 @@ export function SystemContextOverlay({
             </div>
             );
           })}
-          {chatLoading && streamingText ? (
+          {(chatLoading || finishing) && streamingText ? (
             <div className="flex justify-start">
               <div className={`${chatStreamingBubbleClass()} min-w-0 max-w-[85%] rounded-md px-3 py-2 text-sm`}>
                 <StreamingChatMessage
@@ -352,7 +392,7 @@ export function SystemContextOverlay({
         </div>
       </ScrollArea>
 
-      <footer className="shrink-0 border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
+      <footer className="shrink-0 border-t border-[var(--ui-panel-border)] bg-[var(--ui-panel-bg)] px-6 py-4">
         <div className="mx-auto max-w-3xl">
           <ChatAiControls
             selection={aiSelection}

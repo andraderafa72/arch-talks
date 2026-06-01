@@ -7,6 +7,8 @@ import type {
 } from "@/persistence/ports/conversationDocumentStore";
 import type { PersistenceProvider } from "@/persistence/ports/storageProvider";
 import type { CreateTemplateInput, TemplateStore } from "@/persistence/ports/templateStore";
+import type { UiThemeStore } from "@/persistence/ports/uiThemeStore";
+import type { UiThemeV1 } from "@/types/uiTheme";
 
 class HttpConversationDocumentStore implements ConversationDocumentStore {
   private readonly baseUrl: string;
@@ -86,10 +88,29 @@ class HttpChatStore implements ChatStore {
   }
 }
 
+class HttpUiThemeStore implements UiThemeStore {
+  async listThemes(): Promise<UiThemeV1[]> {
+    return [];
+  }
+
+  async writeTheme(_theme: UiThemeV1): Promise<void> {
+    /* HTTP backend has no theme API */
+  }
+
+  async deleteTheme(_id: string): Promise<void> {
+    /* HTTP backend has no theme API */
+  }
+
+  async migrateEmbeddedThemes(_themes: UiThemeV1[]): Promise<number> {
+    return 0;
+  }
+}
+
 export function createHttpPersistenceProvider(baseUrl: string): PersistenceProvider {
   return {
     conversations: new HttpConversationDocumentStore(baseUrl),
     templates: new HttpTemplateStore(baseUrl),
     chats: new HttpChatStore(),
+    uiThemes: new HttpUiThemeStore(),
   };
 }

@@ -58,12 +58,15 @@ export type ApiConversationRow = {
   referenceFolderPath?: string;
   referenceExcerpt?: string;
   scanFolderPath?: string;
+  scanFolderExplicit?: boolean;
   referencePaths?: string[];
   systemContextCompletedAt?: string;
   pendingVaultProposal?: VaultPlanProposal | null;
   vaultName?: string;
   vaultRootPath?: string;
   vaultCategory?: import("@/types/electron-api").VaultCategory;
+  systemDesignRootPath?: string;
+  systemPromptRevision?: number;
 };
 
 function normalizeOpenEditorTabsForConversation(
@@ -142,6 +145,47 @@ function mapCommit(row: ApiCommit): Commit {
   };
 }
 
+function migrateSystemDesignFolderFields(
+  kind: ConversationKind,
+  row: Pick<
+    ApiConversationRow,
+    "scanFolderPath" | "scanFolderExplicit" | "systemDesignRootPath" | "referenceFolderPath"
+  >,
+): {
+  scanFolderPath?: string;
+  scanFolderExplicit?: boolean;
+  referenceFolderPath?: string;
+} {
+  if (kind !== "system_design") {
+    return {
+      scanFolderPath: row.scanFolderPath,
+      scanFolderExplicit: row.scanFolderExplicit,
+      referenceFolderPath: row.referenceFolderPath,
+    };
+  }
+
+  let scanFolderPath = row.scanFolderPath;
+  let scanFolderExplicit = row.scanFolderExplicit;
+  const root = row.systemDesignRootPath?.trim();
+
+  if (!scanFolderExplicit && scanFolderPath?.trim()) {
+    const scan = scanFolderPath.trim();
+    if (!root || scan === root) {
+      scanFolderPath = undefined;
+    } else {
+      scanFolderExplicit = true;
+    }
+  }
+
+  let referenceFolderPath = row.referenceFolderPath;
+  const ref = referenceFolderPath?.trim();
+  if (ref && (!root || ref === root)) {
+    referenceFolderPath = undefined;
+  }
+
+  return { scanFolderPath, scanFolderExplicit, referenceFolderPath };
+}
+
 export function mapApiConversation(row: ApiConversationRow): Conversation {
   const kind: ConversationKind =
     row.kind === "system_design" || row.kind === "uml"
@@ -157,7 +201,7 @@ export function mapApiConversation(row: ApiConversationRow): Conversation {
       (kind === "vault" && Boolean(row.vaultRootPath)))
       ? row.activeFile
       : kind === "system_design"
-        ? Object.keys(files).find((k) => k.endsWith(".puml")) ?? "diagrams/context.puml"
+        ? Object.keys(files).find((k) => k.endsWith(".puml")) ?? "diagrams/block.puml"
         : kind === "vault"
           ? defaultVaultActiveFile(files)
           : "main.tex";
@@ -168,6 +212,8 @@ export function mapApiConversation(row: ApiConversationRow): Conversation {
   const openChatTabIds =
     row.openChatTabIds?.filter((id) => chatTabs.some((tab) => tab.id === id)) ??
     chatTabs.map((tab) => tab.id);
+
+  const migratedFolders = migrateSystemDesignFolderFields(kind, row);
 
   return {
     id: row.id,
@@ -186,15 +232,18 @@ export function mapApiConversation(row: ApiConversationRow): Conversation {
     activeChatTabId,
     chatMessages,
     savedSnapshot,
-    referenceFolderPath: row.referenceFolderPath,
+    referenceFolderPath: migratedFolders.referenceFolderPath,
     referenceExcerpt: row.referenceExcerpt,
-    scanFolderPath: row.scanFolderPath,
+    scanFolderPath: migratedFolders.scanFolderPath,
+    scanFolderExplicit: migratedFolders.scanFolderExplicit,
     referencePaths: row.referencePaths ?? [],
     systemContextCompletedAt: row.systemContextCompletedAt,
     pendingVaultProposal: row.pendingVaultProposal ?? null,
     vaultName: row.vaultName,
     vaultRootPath: row.vaultRootPath,
     vaultCategory: row.vaultCategory,
+    systemDesignRootPath: row.systemDesignRootPath,
+    systemPromptRevision: typeof row.systemPromptRevision === "number" ? row.systemPromptRevision : 0,
   };
 }
 

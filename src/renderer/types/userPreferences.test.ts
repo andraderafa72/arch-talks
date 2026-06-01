@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { INTEGRATION_IDS } from "../../../shared/integrations.ts";
+import { DEFAULT_SPEECH_MODEL_ID } from "../../../shared/speechModels.ts";
 import { DEFAULT_UI_THEME_ID } from "../lib/uiThemeConstants.ts";
 import {
   DEFAULT_INTEGRATIONS,
@@ -46,12 +47,30 @@ test("parseUserPreferences reads integration flags", () => {
   assert.equal(prefs.integrations.plentymarkets?.configured, false);
 });
 
-test("parseUserPreferences normalizes unknown uiThemeId", () => {
+test("parseUserPreferences preserves custom uiThemeId slug without embedded themes", () => {
   const prefs = parseUserPreferences({
     ...DEFAULT_USER_PREFERENCES,
     uiThemeId: "nonexistent-theme",
   });
+  assert.equal(prefs.uiThemeId, "nonexistent-theme");
+});
+
+test("parseUserPreferences normalizes invalid uiThemeId slug", () => {
+  const prefs = parseUserPreferences({
+    ...DEFAULT_USER_PREFERENCES,
+    uiThemeId: "INVALID THEME",
+  });
   assert.equal(prefs.uiThemeId, DEFAULT_UI_THEME_ID);
+});
+
+test("mergeUserPreferences preserves custom uiThemeId when patching lastRoute", () => {
+  const prefs = parseUserPreferences({
+    ...DEFAULT_USER_PREFERENCES,
+    uiThemeId: "my-custom-theme",
+  });
+  const merged = mergeUserPreferences(prefs, { lastRoute: "/templates" });
+  assert.equal(merged.uiThemeId, "my-custom-theme");
+  assert.equal(merged.lastRoute, "/templates");
 });
 
 test("parseUserPreferences keeps built-in orange uiThemeId", () => {
@@ -72,6 +91,29 @@ test("mergeUserPreferences keeps uiThemeId when patching unrelated fields", () =
   const merged = mergeUserPreferences(prefs, { activeConversationId: "conv-b" });
   assert.equal(merged.uiThemeId, "orange");
   assert.equal(merged.activeConversationId, "conv-b");
+});
+
+test("parseUserPreferences defaults speechModelId when missing", () => {
+  const prefs = parseUserPreferences({
+    ...DEFAULT_USER_PREFERENCES,
+  });
+  assert.equal(prefs.speechModelId, DEFAULT_SPEECH_MODEL_ID);
+});
+
+test("parseUserPreferences normalizes unknown speechModelId", () => {
+  const prefs = parseUserPreferences({
+    ...DEFAULT_USER_PREFERENCES,
+    speechModelId: "invalid-model",
+  });
+  assert.equal(prefs.speechModelId, DEFAULT_SPEECH_MODEL_ID);
+});
+
+test("parseUserPreferences keeps valid speechModelId", () => {
+  const prefs = parseUserPreferences({
+    ...DEFAULT_USER_PREFERENCES,
+    speechModelId: "Xenova/whisper-small",
+  });
+  assert.equal(prefs.speechModelId, "Xenova/whisper-small");
 });
 
 test("mergeUserPreferences merges integration patches", () => {

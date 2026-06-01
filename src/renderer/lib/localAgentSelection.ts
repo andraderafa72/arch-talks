@@ -16,10 +16,17 @@ export function resolveEffectiveAiSelection(
 export function isLocalAgentSelection(
   selection: LocalAiSelection | undefined,
   providers: LocalAiProviderOption[],
+  models: { id: string; provider: string; category?: string }[] = [],
 ): boolean {
   const effective = resolveEffectiveAiSelection(selection, providers);
   if (!effective?.provider) return false;
-  return providers.find((p) => p.provider === effective.provider)?.category === "local-agent";
+  if (providers.find((p) => p.provider === effective.provider)?.category === "local-agent") {
+    return true;
+  }
+  if (effective.modelId) {
+    return models.find((m) => m.id === effective.modelId)?.category === "local-agent";
+  }
+  return false;
 }
 
 export function localAgentFolderScanHint(locale: "en" | "pt"): string {

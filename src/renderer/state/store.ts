@@ -23,6 +23,7 @@ import type {
   VaultPlanProposal,
 } from "@/types";
 import type { UserPreferencesV1 } from "@/types/userPreferences";
+import { DEFAULT_SPEECH_MODEL_ID } from "../../../shared/speechModels.ts";
 import type { LocalAiSelection, VaultIngestionPlan } from "@/types/electron-api";
 import { applyDocumentThemeFromId } from "@/lib/documentTheme";
 import {
@@ -31,6 +32,8 @@ import {
   listThemes,
   normalizeUiThemeId,
 } from "@/lib/themeRegistry";
+import { getKnownBuiltInThemeIds } from "@/lib/normalizeUiThemeId";
+import { uiThemePersistenceService } from "@/persistence/services/uiThemePersistenceService";
 import type { UiThemeV1 } from "@/types/uiTheme";
 import { duplicateUiTheme as duplicateUiThemeFromSource, parseUiTheme, slugifyThemeId } from "@/types/uiTheme";
 import { chatTabStreamKey } from "@/lib/chatTabStream";
@@ -233,9 +236,19 @@ type EditorState = {
   customUiThemes: UiThemeV1[];
   locale: UiLocale;
   setLocale: (locale: UiLocale) => void;
+  speechModelId: string;
+  setSpeechModelId: (modelId: string) => void;
+  globalPromptRevision: number;
+  setGlobalPromptRevision: (revision: number) => void;
   errorMessage: string | null;
   hydrateFromBackend: (payload: { conversations: Conversation[]; templates: TechnicalTemplate[] }) => void;
-  createConversation: (options: { kind: ConversationKind; templateId?: string; vaultName?: string }) => void;
+  createConversation: (options: {
+    kind: ConversationKind;
+    templateId?: string;
+    vaultName?: string;
+    projectName?: string;
+    saveFolderPath?: string;
+  }) => void;
   completeVaultInitialization: (
     documentId: string,
     payload: {
@@ -248,11 +261,21 @@ type EditorState = {
       activeFile: string;
     },
   ) => void;
+  completeSystemDesignInitialization: (
+    documentId: string,
+    payload: {
+      title: string;
+      systemDesignRootPath: string;
+      files: Record<string, string>;
+      activeFile: string;
+    },
+  ) => void;
   assignVaultCategory: (documentId: string, category: VaultCategory) => Promise<void>;
   refreshVaultDiskPaths: () => Promise<void>;
   loadVaultFileContent: (file: string) => Promise<void>;
   goHome: () => void;
   setActiveConversation: (id: string) => void;
+  deleteConversation: (documentId: string) => void;
   openConversationTab: () => void;
   closeConversationTab: (tabId: string) => void;
   setActiveConversationTab: (tabId: string) => void;
@@ -263,11 +286,12 @@ type EditorState = {
   clearChatTabStream: (documentId: string, tabId: string) => void;
   setTheme: (theme: ThemeMode) => void;
   setUiThemeId: (uiThemeId: string) => void;
-  saveCustomUiTheme: (theme: UiThemeV1) => void;
-  deleteCustomUiTheme: (id: string) => void;
-  duplicateUiTheme: (sourceId: string, newName: string) => UiThemeV1 | null;
+  setCustomUiThemes: (themes: UiThemeV1[]) => void;
+  saveCustomUiTheme: (theme: UiThemeV1, options?: { previousId?: string }) => Promise<boolean>;
+  deleteCustomUiTheme: (id: string) => Promise<void>;
+  duplicateUiTheme: (sourceId: string, newName: string) => Promise<UiThemeV1 | null>;
   applyUserPreferences: (
-    preferences: Pick<UserPreferencesV1, "theme" | "locale" | "uiThemeId" | "customUiThemes">,
+    preferences: Pick<UserPreferencesV1, "theme" | "locale" | "uiThemeId" | "speechModelId">,
   ) => void;
   setActiveFile: (file: string) => void;
   setFileContent: (file: string, content: string) => void;
@@ -298,15 +322,20 @@ type EditorState = {
   keepAllVaultProposalFiles: () => Promise<void>;
   discardAllVaultProposalFiles: () => Promise<void>;
   undoLastVaultEdit: () => void;
-  completeSystemContext: (documentId: string, systemMd: string) => void;
-  setSystemDesignScanFolder: (path: string | undefined) => void;
+  completeSystemContext: (
+    documentId: string,
+    files: { systemMd: string; suggestionsMd: string },
+    onboardingMessages?: ChatMessage[],
+  ) => void;
+  setSystemPromptRevision: (documentId: string, revision: number) => void;
+  setSystemDesignScanFolder: (documentId: string, path: string | undefined) => void;
   addSystemDesignReferencePath: (path: string) => void;
   removeSystemDesignReferencePath: (path: string) => void;
 };
 
 const systemDesignFiles: Record<string, string> = {
-  "diagrams/context.puml":
-    "@startuml\nactor User\nUser -> API: Authenticate\nAPI --> User: Token\n@enduml\n",
+  "diagrams/block.puml":
+    '@startuml\nrectangle "System" as System\n@enduml\n',
 };
 
 const technicalDocumentDefaultFiles: Record<string, string> = {
@@ -378,13 +407,18 @@ const normalizeConversationTabs = (conversation: Conversation): Conversation => 
 const createConversation = (
   title: string,
   templates: TechnicalTemplate[],
-  options: { kind: ConversationKind; templateId?: string; vaultName?: string },
+  options: {
+    kind: ConversationKind;
+    templateId?: string;
+    vaultName?: string;
+    saveFolderPath?: string;
+  },
 ): Conversation | null => {
   const now = new Date().toISOString();
   const timestamps = { createdAt: now, updatedAt: now };
 
   if (options.kind === "system_design") {
-    const active = "diagrams/context.puml";
+    const active = "diagrams/block.puml";
     const firstChatTabId = crypto.randomUUID();
     return {
       id: crypto.randomUUID(),
@@ -404,6 +438,7 @@ const createConversation = (
       loadedChatTabIds: [firstChatTabId],
       savedSnapshot: { ...systemDesignFiles },
       referencePaths: [],
+      systemPromptRevision: 0,
     };
   }
 
@@ -430,6 +465,7 @@ const createConversation = (
       pendingVaultProposal: null,
       lastAppliedVaultEdit: null,
       vaultName: options.vaultName?.trim(),
+      systemPromptRevision: 0,
     };
   }
 
@@ -454,6 +490,7 @@ const createConversation = (
       chatMessages: [],
       loadedChatTabIds: [firstChatTabId],
       savedSnapshot: { ...files },
+      systemPromptRevision: 0,
     };
   }
 
@@ -476,6 +513,7 @@ const createConversation = (
     chatMessages: [],
     loadedChatTabIds: [firstChatTabId],
     savedSnapshot: { ...files },
+    systemPromptRevision: 0,
   };
 };
 
@@ -494,19 +532,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   uiThemeId: DEFAULT_UI_THEME_ID,
   customUiThemes: [],
   locale: "en",
+  speechModelId: DEFAULT_SPEECH_MODEL_ID,
+  globalPromptRevision: 0,
   applyUserPreferences: (preferences) => {
-    const customUiThemes = preferences.customUiThemes ?? [];
+    const { customUiThemes } = get();
     const uiThemeId = normalizeUiThemeId(preferences.uiThemeId, customUiThemes);
     const theme = preferences.theme;
     applyDocumentThemeFromId(theme, uiThemeId, customUiThemes);
     set({
       theme,
       uiThemeId,
-      customUiThemes,
       locale: preferences.locale,
+      speechModelId: preferences.speechModelId,
     });
   },
+  setCustomUiThemes: (customUiThemes) => {
+    const { theme, uiThemeId } = get();
+    const normalized = normalizeUiThemeId(uiThemeId, customUiThemes);
+    applyDocumentThemeFromId(theme, normalized, customUiThemes);
+    set({ customUiThemes, uiThemeId: normalized });
+  },
   setLocale: (locale) => set({ locale }),
+  setSpeechModelId: (speechModelId) => set({ speechModelId }),
+  setGlobalPromptRevision: (revision) =>
+    set((state) => ({
+      globalPromptRevision: Number.isFinite(revision) ? revision : state.globalPromptRevision,
+    })),
   errorMessage: null,
 
   hydrateFromBackend: ({ conversations: list, templates }) =>
@@ -539,15 +590,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const count = Object.keys(state.conversations).length + 1;
       const titleBase =
         options.kind === "system_design"
-          ? "System Design"
+          ? options.projectName?.trim() || "System Design"
           : options.kind === "vault"
             ? options.vaultName?.trim() || "Knowledge Vault"
             : "Technical Document";
-      const conversation = createConversation(
-        options.kind === "vault" ? titleBase : `${titleBase} ${count}`,
-        state.technicalTemplates,
-        options,
-      );
+      const title =
+        options.kind === "vault" || options.kind === "system_design"
+          ? titleBase
+          : `${titleBase} ${count}`;
+      const conversation = createConversation(title, state.technicalTemplates, options);
       if (!conversation) {
         return {
           errorMessage:
@@ -599,6 +650,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       void get().loadConversationTab(activeTabId);
     }
   },
+
+  deleteConversation: (documentId) =>
+    set((state) => {
+      if (!state.conversations[documentId]) return {};
+      const conversations = { ...state.conversations };
+      delete conversations[documentId];
+      const fallbackId =
+        state.activeConversationId === documentId
+          ? Object.keys(conversations)[0] ?? ""
+          : state.activeConversationId;
+      return {
+        conversations,
+        activeConversationId: fallbackId,
+        screen: fallbackId ? state.screen : "home",
+      };
+    }),
 
   openConversationTab: () =>
     set((state) => {
@@ -815,19 +882,49 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ uiThemeId: normalized });
   },
 
-  saveCustomUiTheme: (theme) => {
+  saveCustomUiTheme: async (theme, options) => {
     const parsed = parseUiTheme({ ...theme, builtIn: false, version: 1 });
-    if (!parsed.ok) return;
+    if (!parsed.ok) return false;
     const next = parsed.theme;
+    if (getKnownBuiltInThemeIds().includes(next.id)) return false;
+
+    const snapshot = get();
     set((state) => {
-      const without = state.customUiThemes.filter((t) => t.id !== next.id);
-      const customUiThemes = [...without, next];
-      applyDocumentThemeFromId(state.theme, next.id, customUiThemes);
-      return { customUiThemes, uiThemeId: next.id };
+      let customUiThemes = state.customUiThemes.filter((t) => t.id !== next.id);
+      if (options?.previousId && options.previousId !== next.id) {
+        customUiThemes = customUiThemes.filter((t) => t.id !== options.previousId);
+      }
+      customUiThemes = [...customUiThemes, next];
+      const uiThemeId =
+        options?.previousId && state.uiThemeId === options.previousId && options.previousId !== next.id
+          ? next.id
+          : state.uiThemeId;
+      const normalized = normalizeUiThemeId(uiThemeId, customUiThemes);
+      applyDocumentThemeFromId(state.theme, normalized, customUiThemes);
+      return { customUiThemes, uiThemeId: normalized };
     });
+
+    try {
+      await uiThemePersistenceService.saveTheme(next, options?.previousId);
+      return true;
+    } catch (error) {
+      console.error(error);
+      applyDocumentThemeFromId(snapshot.theme, snapshot.uiThemeId, snapshot.customUiThemes);
+      set({
+        customUiThemes: snapshot.customUiThemes,
+        uiThemeId: snapshot.uiThemeId,
+      });
+      return false;
+    }
   },
 
-  deleteCustomUiTheme: (id) => {
+  deleteCustomUiTheme: async (id) => {
+    try {
+      await uiThemePersistenceService.deleteTheme(id);
+    } catch (error) {
+      console.error(error);
+      return;
+    }
     set((state) => {
       const customUiThemes = state.customUiThemes.filter((t) => t.id !== id);
       const uiThemeId =
@@ -837,7 +934,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  duplicateUiTheme: (sourceId, newName) => {
+  duplicateUiTheme: async (sourceId, newName) => {
     const source = getThemeById(sourceId, get().customUiThemes);
     const baseId = slugifyThemeId(newName);
     let newId = baseId;
@@ -847,8 +944,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       newId = `${baseId}-${n++}`;
     }
     const duplicate = duplicateUiThemeFromSource(source, newId, newName);
-    get().saveCustomUiTheme(duplicate);
-    return duplicate;
+    const saved = await get().saveCustomUiTheme(duplicate);
+    return saved ? duplicate : null;
   },
 
   setActiveFile: (file) =>
@@ -1422,6 +1519,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       };
     }),
 
+  completeSystemDesignInitialization: (documentId, payload) =>
+    set((state) => {
+      const current = state.conversations[documentId];
+      if (!current || current.kind !== "system_design") return {};
+      const openTabs = payload.activeFile ? [payload.activeFile] : [];
+      return {
+        conversations: {
+          ...state.conversations,
+          [documentId]: {
+            ...current,
+            title: payload.title,
+            systemDesignRootPath: payload.systemDesignRootPath,
+            files: payload.files,
+            activeFile: payload.activeFile,
+            openEditorTabs: openTabs,
+            savedSnapshot: { ...payload.files },
+          },
+        },
+      };
+    }),
+
   assignVaultCategory: async (documentId, category) => {
     const api = requireVaultElectronApi();
     await api.vaultAssignCategory!({ documentId, category });
@@ -1793,36 +1911,82 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       };
     }),
 
-  completeSystemContext: (documentId, systemMd) =>
+  completeSystemContext: (documentId, materializedFiles, onboardingMessages) =>
     set((state) => {
       const current = state.conversations[documentId];
       if (!current || current.kind !== "system_design") return {};
-      const content = systemMd.trim();
-      if (!content) return {};
-      const files = { ...current.files, "SYSTEM.md": content };
-      const savedSnapshot = { ...current.savedSnapshot, "SYSTEM.md": content };
+      const systemMd = materializedFiles.systemMd.trim();
+      const suggestionsMd = materializedFiles.suggestionsMd.trim();
+      if (!systemMd || !suggestionsMd) return {};
+      const files = {
+        ...current.files,
+        "SYSTEM.md": systemMd,
+        "diagrams/suggestions.md": suggestionsMd,
+      };
+      const savedSnapshot = {
+        ...current.savedSnapshot,
+        "SYSTEM.md": systemMd,
+        "diagrams/suggestions.md": suggestionsMd,
+      };
+      const normalized = normalizeConversationTabs(current);
+      const contextTranscript = (onboardingMessages ?? []).filter(
+        (message) => message.role === "user" || message.role === "assistant" || message.role === "system",
+      );
+      const chatTabs =
+        contextTranscript.length > 0
+          ? normalized.chatTabs.map((tab, index) =>
+              index === 0
+                ? {
+                    ...tab,
+                    messages: contextTranscript,
+                  }
+                : tab,
+            )
+          : normalized.chatTabs;
+      const activeChatMessages =
+        chatTabs.find((tab) => tab.id === normalized.activeChatTabId)?.messages ?? normalized.chatMessages;
       return {
         conversations: {
           ...state.conversations,
           [documentId]: {
-            ...current,
+            ...normalized,
             files,
             savedSnapshot,
+            chatTabs,
+            chatMessages: activeChatMessages,
             systemContextCompletedAt: nowIso(),
           },
         },
       };
     }),
 
-  setSystemDesignScanFolder: (path) =>
+  setSystemPromptRevision: (documentId, revision) =>
     set((state) => {
-      const id = state.activeConversationId;
-      const current = state.conversations[id];
+      const current = state.conversations[documentId];
+      if (!current) return {};
+      return {
+        conversations: {
+          ...state.conversations,
+          [documentId]: {
+            ...current,
+            systemPromptRevision: Number.isFinite(revision) ? revision : current.systemPromptRevision ?? 0,
+          },
+        },
+      };
+    }),
+
+  setSystemDesignScanFolder: (documentId, path) =>
+    set((state) => {
+      const current = state.conversations[documentId];
       if (!current || current.kind !== "system_design") return {};
       return {
         conversations: {
           ...state.conversations,
-          [id]: { ...current, scanFolderPath: path },
+          [documentId]: {
+            ...current,
+            scanFolderPath: path,
+            scanFolderExplicit: path !== undefined,
+          },
         },
       };
     }),

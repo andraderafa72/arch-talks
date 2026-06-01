@@ -7,6 +7,9 @@ import type {
 } from "@/persistence/ports/conversationDocumentStore";
 import type { PersistenceProvider } from "@/persistence/ports/storageProvider";
 import type { TemplateStore } from "@/persistence/ports/templateStore";
+import type { UiThemeStore } from "@/persistence/ports/uiThemeStore";
+import { parseCustomUiThemes } from "@/lib/themeRegistry";
+import type { UiThemeV1 } from "@/types/uiTheme";
 
 class ElectronConversationDocumentStore implements ConversationDocumentStore {
   async listConversationRows(): Promise<ApiConversationRow[]> {
@@ -63,10 +66,38 @@ class ElectronChatStore implements ChatStore {
   }
 }
 
+class ElectronUiThemeStore implements UiThemeStore {
+  private requireApi() {
+    const api = window.electronApi;
+    if (!api?.writeUiTheme || !api.listUiThemes || !api.deleteUiTheme) {
+      throw new Error("UI theme APIs are unavailable. Restart the desktop app.");
+    }
+    return api;
+  }
+
+  async listThemes(): Promise<UiThemeV1[]> {
+    const raw = await this.requireApi().listUiThemes();
+    return parseCustomUiThemes(raw);
+  }
+
+  async writeTheme(theme: UiThemeV1): Promise<void> {
+    await this.requireApi().writeUiTheme(theme);
+  }
+
+  async deleteTheme(id: string): Promise<void> {
+    await this.requireApi().deleteUiTheme(id);
+  }
+
+  async migrateEmbeddedThemes(themes: UiThemeV1[]): Promise<number> {
+    return this.requireApi().migrateEmbeddedUiThemes(themes);
+  }
+}
+
 export function createElectronPersistenceProvider(): PersistenceProvider {
   return {
     conversations: new ElectronConversationDocumentStore(),
     templates: new ElectronTemplateStore(),
     chats: new ElectronChatStore(),
+    uiThemes: new ElectronUiThemeStore(),
   };
 }

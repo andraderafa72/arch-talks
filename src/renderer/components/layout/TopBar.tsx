@@ -1,12 +1,18 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import {
+  DEFAULT_SETTINGS_PATH,
+  isSettingsPath,
+} from "@/components/configuration/settings/settingsRoutes";
 import { Badge } from "@/components/ui/badge";
 import { ConversationPicker } from "@/components/layout/ConversationPicker";
 import { TopBarHoverMenus } from "@/components/layout/TopBarHoverMenus";
+import { UiThemePicker } from "@/components/layout/UiThemePicker";
 import { useWindowTabsContext } from "@/contexts/WindowTabsContext";
 import { useWorkspaceConversationContext } from "@/contexts/WorkspaceConversationContext";
 import { listThemes } from "@/lib/themeRegistry";
 import { topBarStrings } from "@/lib/uiCopy";
+import { parseRoutePath } from "@/lib/windowTabs";
 import { useEditorStore } from "@/state/store";
 import { Moon, Sun } from "lucide-react";
 
@@ -15,6 +21,7 @@ export type AppMainSection =
   | "templates"
   | "themes"
   | "configurationIntegrations"
+  | "configurationSettings"
   | "conversations"
   | "skillsVault"
   | "toolMarkdownPdf"
@@ -38,16 +45,16 @@ export function TopBar() {
   } = useEditorStore();
   const {
     conversationList,
-    activeConversationId,
     fileNames,
     hasUnsavedChanges,
   } = useWorkspaceConversationContext();
-  const { openNewTab } = useWindowTabsContext();
+  const { openNewTab, openWorkspace, selectTab, tabs, activeTabConversationId, isHomeActive } = useWindowTabsContext();
 
   const section: AppMainSection = (() => {
     if (location.pathname === "/templates") return "templates";
     if (location.pathname === "/themes") return "themes";
     if (location.pathname === "/configuration/integrations") return "configurationIntegrations";
+    if (location.pathname.startsWith("/configuration/settings")) return "configurationSettings";
     if (location.pathname === "/conversations") return "conversations";
     if (location.pathname === "/skills/vaults") return "skillsVault";
     if (location.pathname === "/tools/markdown-pdf") return "toolMarkdownPdf";
@@ -67,6 +74,15 @@ export function TopBar() {
   const isWorkspaceSection = section === "editor" || section === "conversations";
 
   const isSkillsSection = section === "skillsVault";
+
+  const openSettings = useCallback(() => {
+    const existing = tabs.find((tab) => isSettingsPath(parseRoutePath(tab.path).pathname));
+    if (existing) {
+      selectTab(existing);
+      return;
+    }
+    openNewTab({ path: DEFAULT_SETTINGS_PATH });
+  }, [openNewTab, selectTab, tabs]);
 
   const hoverMenus = useMemo(
     () => [
@@ -182,7 +198,8 @@ export function TopBar() {
         active:
           section === "templates" ||
           section === "themes" ||
-          section === "configurationIntegrations",
+          section === "configurationIntegrations" ||
+          section === "configurationSettings",
         groups: [
           {
             items: [
@@ -195,6 +212,11 @@ export function TopBar() {
                 id: "config-integrations",
                 label: t.integrations,
                 onSelect: () => navigate("/configuration/integrations"),
+              },
+              {
+                id: "config-settings",
+                label: t.settings,
+                onSelect: openSettings,
               },
             ],
           },
@@ -212,22 +234,6 @@ export function TopBar() {
                 label: t.darkTheme,
                 selected: theme === "dark",
                 onSelect: () => setTheme("dark"),
-              },
-            ],
-          },
-          {
-            heading: t.uiThemes,
-            items: [
-              ...uiThemes.map((uiTheme) => ({
-                id: `config-ui-theme-${uiTheme.id}`,
-                label: uiTheme.name,
-                selected: uiThemeId === uiTheme.id,
-                onSelect: () => setUiThemeId(uiTheme.id),
-              })),
-              {
-                id: "config-manage-themes",
-                label: t.manageThemes,
-                onSelect: () => navigate("/themes"),
               },
             ],
           },
@@ -258,17 +264,18 @@ export function TopBar() {
       isWorkspaceSection,
       locale,
       navigate,
+      openSettings,
       section,
       setLocale,
       setTheme,
-      setUiThemeId,
-      customUiThemes,
-      uiThemeId,
-      uiThemes,
       t,
       theme,
     ],
   );
+
+  const isWorkspaceRoute = location.pathname === "/workspace";
+  const pickerShowsPlaceholder = isHomeActive || !isWorkspaceRoute || !activeTabConversationId;
+  const pickerSelectedConversationId = pickerShowsPlaceholder ? undefined : activeTabConversationId;
 
   return (
     <header className="w-full min-w-0 max-w-full border-b border-[var(--ui-header-border)] bg-[var(--ui-header-bg)] px-3 py-2 text-[var(--ui-header-fg)]">
@@ -276,16 +283,14 @@ export function TopBar() {
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 overflow-visible">
           <ConversationPicker
             conversations={conversationList}
-            activeConversationId={activeConversationId}
+            selectedConversationId={pickerSelectedConversationId}
+            isPlaceholder={pickerShowsPlaceholder}
+            placeholderLabel={t.selectWorkspace}
             templates={technicalTemplates}
             locale={locale}
             onSelect={(id) => {
               const conversation = conversationList.find((item) => item.id === id);
-              openNewTab({
-                path: "/workspace",
-                conversationId: id,
-                label: conversation?.title,
-              });
+              openWorkspace(id, conversation?.title);
             }}
           />
           <TopBarHoverMenus menus={hoverMenus} />
@@ -315,6 +320,13 @@ export function TopBar() {
               )}
             </span>
           </button>
+          <UiThemePicker
+            uiThemes={uiThemes}
+            uiThemeId={uiThemeId}
+            locale={locale}
+            onSelectTheme={setUiThemeId}
+            onManageThemes={() => navigate("/themes")}
+          />
         </div>
       </div>
     </header>

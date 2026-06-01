@@ -105,7 +105,7 @@ export function WindowTabBar() {
         </button>
 
         {visibleTabs.map((tab) => {
-          const isActive = tab.id === activeTabId && location.pathname !== "/";
+          const isActive = tab.id === activeTabId;
           const tabTitle = displayTabLabel(tab, conversations, locale, {
             activeTabId,
             activeConversationId,

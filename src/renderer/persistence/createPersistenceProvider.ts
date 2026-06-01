@@ -5,6 +5,7 @@ import { createHttpPersistenceProvider } from "@/persistence/adapters/httpPersis
 import type { PersistenceProvider } from "@/persistence/ports/storageProvider";
 
 let singletonProvider: PersistenceProvider | null = null;
+let singletonUsesElectron = false;
 
 export function createPersistenceProvider(): PersistenceProvider {
   if (typeof window !== "undefined" && window.electronApi) {
@@ -18,8 +19,10 @@ export function createPersistenceProvider(): PersistenceProvider {
 }
 
 export function getPersistenceProvider(): PersistenceProvider {
-  if (!singletonProvider) {
+  const hasElectron = typeof window !== "undefined" && Boolean(window.electronApi);
+  if (!singletonProvider || (hasElectron && !singletonUsesElectron)) {
     singletonProvider = createPersistenceProvider();
+    singletonUsesElectron = hasElectron;
   }
   return singletonProvider;
 }

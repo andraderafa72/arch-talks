@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Check, List, Pencil, Plus, Settings, X } from "lucide-react";
+import { Check, List, Pencil, Plus, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ChatAiControls } from "@/components/chat/ChatAiControls";
@@ -22,7 +22,7 @@ import {
 } from "@/lib/chatSystemMessage";
 import { useEditorStore } from "@/state/store";
 import { collectAllPaths, buildFileTree } from "@/lib/fileTreeUtils";
-import { SystemDesignWorkspaceSettings } from "@/components/system-design/SystemDesignWorkspaceSettings";
+import { getEffectiveScanFolderPath } from "@/lib/systemDesignFolders";
 import type { MentionAutocompleteConfig } from "@/hooks/useMentionAutocomplete";
 import type { ChatConversationTab, ChatMessage, ChatSystemTone, Patch } from "@/types";
 import type { LocalAiSelection } from "@/types/electron-api";
@@ -49,30 +49,6 @@ function messageBubbleStyleForRole(
 
 const chatMessageBubbleClass =
   "min-w-0 rounded-md px-3 py-2 text-sm break-words [overflow-wrap:anywhere]";
-
-function ChatThinkingIndicator({ locale }: { locale: string }) {
-  return (
-    <div
-      className="flex items-center gap-2 py-0.5 text-sm text-[var(--ui-chat-thinking-fg)]"
-      role="status"
-      aria-live="polite"
-      aria-label={locale === "pt" ? "Pensando" : "Thinking"}
-    >
-      <span className="relative flex h-2 w-2 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--ui-chat-thinking-indicator)] opacity-60" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--ui-chat-thinking-indicator)]" />
-      </span>
-      <span className="italic">
-        {locale === "pt" ? "Pensando" : "Thinking"}
-        <span className="inline-flex w-[1.25rem]">
-          <span className="animate-pulse">.</span>
-          <span className="animate-pulse [animation-delay:200ms]">.</span>
-          <span className="animate-pulse [animation-delay:400ms]">.</span>
-        </span>
-      </span>
-    </div>
-  );
-}
 
 function messageRowLayoutClass(role: ChatMessage["role"]) {
   if (role === "user") return "justify-end";
@@ -129,14 +105,14 @@ export function ChatPanel({
   const referenceExcerpt = useEditorStore(
     (s) => s.conversations[s.activeConversationId]?.referenceExcerpt,
   );
-  const scanFolderPath = useEditorStore(
-    (s) => s.conversations[s.activeConversationId]?.scanFolderPath,
-  );
+  const activeConversation = useEditorStore((s) => s.conversations[s.activeConversationId]);
+  const effectiveScanFolderPath = getEffectiveScanFolderPath(activeConversation);
+  const systemPromptRevision = activeConversation?.systemPromptRevision ?? 0;
+  const globalPromptRevision = useEditorStore((s) => s.globalPromptRevision);
   const referencePaths = useEditorStore(
     (s) => s.conversations[s.activeConversationId]?.referencePaths,
   );
   const systemMd = useEditorStore((s) => s.conversations[s.activeConversationId]?.files["SYSTEM.md"] ?? "");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
@@ -318,6 +294,7 @@ export function ChatPanel({
 
         const streamId = crypto.randomUUID();
         const streamContext = { documentId: activeConversationId, tabId: activeConversationTabId };
+        const promptSessionKey = `${activeConversationTabId}:g${globalPromptRevision}:p${systemPromptRevision}`;
         inFlightStreamRef.current = { ...streamContext, streamId };
         assistantCommittedStreamIdRef.current = null;
         setChatTabStream(streamContext.documentId, streamContext.tabId, { streamId, text: "" });
@@ -327,7 +304,7 @@ export function ChatPanel({
         try {
           if (isVault && api.vaultChatSend) {
             const response = await api.vaultChatSend({
-              sessionKey: activeConversationTabId,
+              sessionKey: promptSessionKey,
               documentId: activeConversationId,
               activeFile,
               files,
@@ -421,14 +398,15 @@ export function ChatPanel({
             }
           } else if (isSystemDesign && api.systemDesignChatSend) {
             const response = await api.systemDesignChatSend({
-              sessionKey: activeConversationTabId,
+              sessionKey: promptSessionKey,
+              documentId: activeConversationId,
               activeFile,
               files,
               systemMd,
               prompt: promptText,
               aiSelection,
               streamId,
-              scanFolderPath,
+              scanFolderPath: effectiveScanFolderPath,
               referencePaths: referencePaths ?? [],
             });
             commitAssistantMessage(response.reply || "", streamId, streamContext, streamedText());
@@ -437,7 +415,8 @@ export function ChatPanel({
             }
           } else if (api.workspaceChatSend) {
             const response = await api.workspaceChatSend({
-              sessionKey: activeConversationTabId,
+              sessionKey: promptSessionKey,
+              documentId: activeConversationId,
               activeFile,
               files,
               prompt: promptText,
@@ -529,6 +508,7 @@ export function ChatPanel({
       commitAssistantMessage,
       conversationKind,
       files,
+      globalPromptRevision,
       messages,
       aiSelection,
       locale,
@@ -537,9 +517,10 @@ export function ChatPanel({
       referenceExcerpt,
       referenceFolderPath,
       referencePaths,
-      scanFolderPath,
+      effectiveScanFolderPath,
       stageVaultProposal,
       systemMd,
+      systemPromptRevision,
     ],
   );
 
@@ -704,19 +685,6 @@ export function ChatPanel({
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
         </Button>
-        {conversationKind === "system_design" ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 shrink-0 px-2"
-            onClick={() => setSettingsOpen(true)}
-            aria-label={locale === "pt" ? "Definições do espaço" : "Workspace settings"}
-            title={locale === "pt" ? "Definições do espaço" : "Workspace settings"}
-          >
-            <Settings className="h-3.5 w-3.5" aria-hidden="true" />
-          </Button>
-        ) : null}
       </div>
       <ScrollArea className="min-h-0 min-w-0 flex-1 px-5 py-3">
         <div ref={messagesContainerRef} className="flex min-w-0 w-full flex-col space-y-3">
@@ -771,11 +739,6 @@ export function ChatPanel({
           <div ref={workspaceStreamEndRef} />
         </div>
       </ScrollArea>
-      {isGenerating ? (
-        <div className="shrink-0 px-5 py-2">
-          <ChatThinkingIndicator locale={locale} />
-        </div>
-      ) : null}
       <div className="border-t border-[var(--ui-panel-border)] bg-[var(--ui-panel-bg)] px-5 py-3">
         <ChatAiControls
           selection={aiSelection}
@@ -794,17 +757,6 @@ export function ChatPanel({
           onLoadingChange={setIsGenerating}
         />
       </div>
-      {settingsOpen && conversationKind === "system_design" ? (
-        <SystemDesignWorkspaceSettings
-          documentId={activeConversationId}
-          locale={locale}
-          scanFolderPath={scanFolderPath}
-          referencePaths={referencePaths}
-          aiSelection={aiSelection}
-          hasSystemMd={Boolean(files["SYSTEM.md"]?.trim())}
-          onClose={() => setSettingsOpen(false)}
-        />
-      ) : null}
     </div>
   );
 }

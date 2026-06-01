@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { listUiThemes, migrateEmbeddedUiThemes } from "@/api/uiThemes";
 import { listConversations } from "@/api/conversations";
 import { listTemplates } from "@/api/templates";
 import { ConversationPersistenceService } from "@/persistence/services/conversationPersistenceService";
@@ -33,9 +34,36 @@ export function useArchitectureBootstrap({ hydrateFromBackend, clearError }: Use
 
     const bootstrap = async () => {
       let preferences: UserPreferencesV1 = await userPreferencesService.load();
+
+      if (preferences.customUiThemes.length > 0) {
+        try {
+          await migrateEmbeddedUiThemes(preferences.customUiThemes);
+          preferences = userPreferencesService.patch({ customUiThemes: [] });
+        } catch (error) {
+          console.error("Failed to migrate embedded UI themes", error);
+        }
+      }
+
+      let loadedThemes: Awaited<ReturnType<typeof listUiThemes>> = [];
+      try {
+        loadedThemes = await listUiThemes();
+      } catch (error) {
+        console.error("Failed to load UI themes from disk", error);
+      }
+
+      useEditorStore.getState().setCustomUiThemes(loadedThemes);
       useEditorStore.getState().applyUserPreferences(preferences);
       useEditorStore.setState({ activeConversationId: preferences.activeConversationId });
       setInitialLayout(preferences.workspaceLayout);
+
+      try {
+        const globalPromptSnapshot = await window.electronApi?.promptOverridesReadManifest?.("global");
+        if (globalPromptSnapshot) {
+          useEditorStore.getState().setGlobalPromptRevision(globalPromptSnapshot.manifest.revision);
+        }
+      } catch (error) {
+        console.error("Failed to load global prompt overrides", error);
+      }
 
       try {
         const [convs, tmpls] = await Promise.all([listConversations(), listTemplates()]);

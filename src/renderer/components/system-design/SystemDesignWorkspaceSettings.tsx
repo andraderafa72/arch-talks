@@ -9,7 +9,7 @@ import type { LocalAiProviderOption, LocalAiSelection } from "@/types/electron-a
 type SystemDesignWorkspaceSettingsProps = {
   documentId: string;
   locale: UiLocale;
-  scanFolderPath?: string;
+  effectiveScanFolderPath?: string;
   referencePaths?: string[];
   aiSelection?: LocalAiSelection;
   hasSystemMd: boolean;
@@ -19,7 +19,7 @@ type SystemDesignWorkspaceSettingsProps = {
 export function SystemDesignWorkspaceSettings({
   documentId,
   locale,
-  scanFolderPath,
+  effectiveScanFolderPath,
   referencePaths = [],
   aiSelection,
   hasSystemMd,
@@ -29,6 +29,12 @@ export function SystemDesignWorkspaceSettings({
   const addSystemDesignReferencePath = useEditorStore((s) => s.addSystemDesignReferencePath);
   const removeSystemDesignReferencePath = useEditorStore((s) => s.removeSystemDesignReferencePath);
   const completeSystemContext = useEditorStore((s) => s.completeSystemContext);
+  const systemDesignRootPath = useEditorStore(
+    (s) => s.conversations[documentId]?.systemDesignRootPath,
+  );
+  const currentFiles = useEditorStore((s) => s.conversations[documentId]?.files ?? {});
+  const systemPromptRevision = useEditorStore((s) => s.conversations[documentId]?.systemPromptRevision ?? 0);
+  const globalPromptRevision = useEditorStore((s) => s.globalPromptRevision);
   const [providers, setProviders] = useState<LocalAiProviderOption[]>([]);
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
@@ -59,8 +65,8 @@ export function SystemDesignWorkspaceSettings({
   const handleSetScanFolder = useCallback(async () => {
     if (!canScanFolder) return;
     const path = await pickDirectory();
-    if (path) setSystemDesignScanFolder(path);
-  }, [canScanFolder, pickDirectory, setSystemDesignScanFolder]);
+    if (path) setSystemDesignScanFolder(documentId, path);
+  }, [canScanFolder, documentId, pickDirectory, setSystemDesignScanFolder]);
 
   const handleRegenerateFromFolder = useCallback(async () => {
     if (!canScanFolder || !hasSystemMd) return;
@@ -76,10 +82,11 @@ export function SystemDesignWorkspaceSettings({
     const api = window.electronApi;
     if (!api?.systemDesignMaterializeSystemMd) return;
     setRegenerating(true);
-    setSystemDesignScanFolder(path);
+    setSystemDesignScanFolder(documentId, path);
     try {
       const response = await api.systemDesignMaterializeSystemMd({
-        sessionKey: `system-context:${documentId}:regen`,
+        sessionKey: `system-context:${documentId}:regen:g${globalPromptRevision}:p${systemPromptRevision}`,
+        documentId,
         messages: [
           {
             role: "user",
@@ -91,8 +98,9 @@ export function SystemDesignWorkspaceSettings({
         ],
         aiSelection,
         scanFolderPath: path,
+        files: currentFiles,
       });
-      completeSystemContext(documentId, response.systemMd);
+      completeSystemContext(documentId, response);
     } finally {
       setRegenerating(false);
     }
@@ -100,11 +108,14 @@ export function SystemDesignWorkspaceSettings({
     aiSelection,
     canScanFolder,
     completeSystemContext,
+    currentFiles,
     documentId,
     hasSystemMd,
     locale,
     pickDirectory,
     setSystemDesignScanFolder,
+    globalPromptRevision,
+    systemPromptRevision,
   ]);
 
   return (
@@ -127,6 +138,17 @@ export function SystemDesignWorkspaceSettings({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-6">
+          {systemDesignRootPath ? (
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                {locale === "pt" ? "Pasta do projeto" : "Project folder"}
+              </h3>
+              <p className="mt-1 break-all font-mono text-xs text-zinc-700 dark:text-zinc-300">
+                {systemDesignRootPath}
+              </p>
+            </section>
+          ) : null}
+
           {workspaceRoot ? (
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
@@ -177,8 +199,8 @@ export function SystemDesignWorkspaceSettings({
             {canScanFolder ? (
               <>
                 <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                  {scanFolderPath ? (
-                    <code className="font-mono">{scanFolderPath}</code>
+                  {effectiveScanFolderPath ? (
+                    <code className="font-mono">{effectiveScanFolderPath}</code>
                   ) : locale === "pt" ? (
                     "Nenhuma pasta selecionada."
                   ) : (
@@ -189,8 +211,8 @@ export function SystemDesignWorkspaceSettings({
                   <Button type="button" size="sm" variant="secondary" onClick={() => void handleSetScanFolder()}>
                     {locale === "pt" ? "Escolher pasta" : "Choose folder"}
                   </Button>
-                  {scanFolderPath ? (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setSystemDesignScanFolder(undefined)}>
+                  {effectiveScanFolderPath ? (
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setSystemDesignScanFolder(documentId, undefined)}>
                       {locale === "pt" ? "Limpar" : "Clear"}
                     </Button>
                   ) : null}

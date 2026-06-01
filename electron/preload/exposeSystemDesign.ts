@@ -6,6 +6,8 @@ import type {
   SystemDesignChatResponse,
   SystemDesignContextChatRequest,
   SystemDesignContextChatResponse,
+  SystemDesignInitializeRequest,
+  SystemDesignInitializeResponse,
   SystemDesignListReferenceEntriesRequest,
   SystemDesignListReferenceEntriesResponse,
   SystemDesignMaterializeRequest,
@@ -19,6 +21,8 @@ export function exposeSystemDesignApis(): Pick<
   | "systemDesignChatSend"
   | "systemDesignListReferenceEntries"
   | "systemDesignGetChatFolderPath"
+  | "systemDesignEnsureSaveFolder"
+  | "systemDesignInitialize"
   | "pickDirectory"
 > {
   return {
@@ -36,6 +40,13 @@ export function exposeSystemDesignApis(): Pick<
       ipcRenderer.invoke("systemDesign:listReferenceEntries", req),
     systemDesignGetChatFolderPath: (documentId: string): Promise<{ path: string }> =>
       ipcRenderer.invoke("systemDesign:getChatFolderPath", documentId),
+    systemDesignEnsureSaveFolder: (req: {
+      path: string;
+      createIfMissing?: boolean;
+    }): Promise<{ path: string }> => ipcRenderer.invoke("systemDesign:ensureSaveFolder", req),
+    systemDesignInitialize: (
+      req: SystemDesignInitializeRequest,
+    ): Promise<SystemDesignInitializeResponse> => ipcRenderer.invoke("systemDesign:initialize", req),
     pickDirectory: (): Promise<{ ok: true; path: string } | { ok: false; canceled: true }> =>
       ipcRenderer.invoke("vault:pickDirectory"),
   };

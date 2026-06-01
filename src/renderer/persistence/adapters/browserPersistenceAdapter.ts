@@ -7,9 +7,13 @@ import type {
 } from "@/persistence/ports/conversationDocumentStore";
 import type { PersistenceProvider } from "@/persistence/ports/storageProvider";
 import type { TemplateStore } from "@/persistence/ports/templateStore";
+import type { UiThemeStore } from "@/persistence/ports/uiThemeStore";
+import { parseCustomUiThemes } from "@/lib/themeRegistry";
+import type { UiThemeV1 } from "@/types/uiTheme";
 
 const BROWSER_CONV_KEY = "rag-talks.architecture.v1.conversations";
 const BROWSER_TMPL_KEY = "rag-talks.architecture.v1.templates";
+const BROWSER_THEMES_KEY = "rag-talks.architecture.v1.themes";
 
 function readDoc<T>(key: string): { items: T[] } {
   if (typeof localStorage === "undefined") return { items: [] };
@@ -82,10 +86,58 @@ class BrowserChatStore implements ChatStore {
   }
 }
 
+function readThemesMap(): Record<string, UiThemeV1> {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(BROWSER_THEMES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const themes = parseCustomUiThemes(Object.values(parsed));
+    return Object.fromEntries(themes.map((theme) => [theme.id, theme]));
+  } catch {
+    return {};
+  }
+}
+
+function writeThemesMap(themes: Record<string, UiThemeV1>): void {
+  localStorage.setItem(BROWSER_THEMES_KEY, JSON.stringify(themes));
+}
+
+class BrowserUiThemeStore implements UiThemeStore {
+  async listThemes(): Promise<UiThemeV1[]> {
+    return Object.values(readThemesMap());
+  }
+
+  async writeTheme(theme: UiThemeV1): Promise<void> {
+    const map = readThemesMap();
+    map[theme.id] = theme;
+    writeThemesMap(map);
+  }
+
+  async deleteTheme(id: string): Promise<void> {
+    const map = readThemesMap();
+    delete map[id];
+    writeThemesMap(map);
+  }
+
+  async migrateEmbeddedThemes(themes: UiThemeV1[]): Promise<number> {
+    const map = readThemesMap();
+    let written = 0;
+    for (const theme of themes) {
+      if (map[theme.id]) continue;
+      map[theme.id] = theme;
+      written += 1;
+    }
+    if (written > 0) writeThemesMap(map);
+    return written;
+  }
+}
+
 export function createBrowserPersistenceProvider(): PersistenceProvider {
   return {
     conversations: new BrowserConversationDocumentStore(),
     templates: new BrowserTemplateStore(),
     chats: new BrowserChatStore(),
+    uiThemes: new BrowserUiThemeStore(),
   };
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { voiceInputStrings } from "@/lib/uiCopy";
+import { useEditorStore } from "@/state/store";
 import type { ChatSystemTone, UiLocale } from "@/types";
 
 const TARGET_SAMPLE_RATE = 16_000;
@@ -26,6 +27,7 @@ export function useVoiceInput({
   onFinalTranscript,
 }: UseVoiceInputOptions) {
   const strings = voiceInputStrings(locale);
+  const speechModelId = useEditorStore((s) => s.speechModelId);
 
   const [isListening, setIsListening] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(false);
@@ -34,6 +36,7 @@ export function useVoiceInput({
   const onFinalTranscriptRef = useRef(onFinalTranscript);
   const onSystemMessageRef = useRef(onSystemMessage);
   const stringsRef = useRef(strings);
+  const speechModelIdRef = useRef(speechModelId);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -46,7 +49,8 @@ export function useVoiceInput({
     onFinalTranscriptRef.current = onFinalTranscript;
     onSystemMessageRef.current = onSystemMessage;
     stringsRef.current = strings;
-  }, [onFinalTranscript, onSystemMessage, strings]);
+    speechModelIdRef.current = speechModelId;
+  }, [onFinalTranscript, onSystemMessage, strings, speechModelId]);
 
   const isTranscribing = pendingChunks > 0;
   const hasVoiceInput = isVoiceInputAvailable();
@@ -77,10 +81,12 @@ export function useVoiceInput({
         .then(async () => {
           setPendingChunks((count) => count + 1);
           try {
+            const modelId = speechModelIdRef.current;
             const { text } = await api.speechTranscribeChunk!({
               samples: new Float32Array(samples).buffer,
               sampleRate: TARGET_SAMPLE_RATE,
               locale,
+              modelId,
             });
             if (text && listeningRef.current) {
               onFinalTranscriptRef.current(text);
@@ -141,8 +147,12 @@ export function useVoiceInput({
     void (async () => {
       try {
         setIsModelLoading(true);
+        const modelId = speechModelIdRef.current;
+        if (api.speechSetModelId) {
+          await api.speechSetModelId(modelId);
+        }
         if (api.speechEnsureModel) {
-          await api.speechEnsureModel();
+          await api.speechEnsureModel({ modelId });
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

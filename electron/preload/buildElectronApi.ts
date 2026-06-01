@@ -12,6 +12,7 @@ import { exposeIntegrationsApi } from "./exposeIntegrations.ts";
 import { exposeSpeechApis } from "./exposeSpeech.ts";
 import { exposeDailyReportApis } from "./exposeDailyReport.ts";
 import { exposeSystemDesignApis } from "./exposeSystemDesign.ts";
+import { exposePromptOverrideApis } from "./exposePromptOverrides.ts";
 
 export function buildElectronApi(): ElectronApi {
   return {
@@ -29,5 +30,6 @@ export function buildElectronApi(): ElectronApi {
     ...exposeIntegrationsApi(),
     ...exposeDailyReportApis(),
     ...exposeSystemDesignApis(),
+    ...exposePromptOverrideApis(),
   };
 }

@@ -21,7 +21,6 @@ export function useUserPreferencesSync(): void {
       if (state.theme !== prev.theme) patch.theme = state.theme;
       if (state.locale !== prev.locale) patch.locale = state.locale;
       if (state.uiThemeId !== prev.uiThemeId) patch.uiThemeId = state.uiThemeId;
-      if (state.customUiThemes !== prev.customUiThemes) patch.customUiThemes = state.customUiThemes;
       // Keep persisted palette id aligned with the live store when other fields change (e.g. tab switches).
       if (
         patch.uiThemeId === undefined &&
@@ -31,6 +30,9 @@ export function useUserPreferencesSync(): void {
       }
       if (state.activeConversationId !== prev.activeConversationId) {
         patch.activeConversationId = state.activeConversationId;
+      }
+      if (state.speechModelId !== prev.speechModelId) {
+        patch.speechModelId = state.speechModelId;
       }
       if (Object.keys(patch).length > 0) {
         userPreferencesService.patch(patch);

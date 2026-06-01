@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
+import { useWindowTabsContext } from "@/contexts/WindowTabsContext";
 import { isMarkdownVaultPath } from "@/lib/vaultPaths";
 import { ChatWorkspaceService } from "@/persistence/services/chatWorkspaceService";
 import { useEditorStore } from "@/state/store";
@@ -69,9 +71,11 @@ type WorkspaceConversationProviderProps = {
 };
 
 export function WorkspaceConversationProvider({ children, onOpenConversation }: WorkspaceConversationProviderProps) {
+  const location = useLocation();
+  const { activeTabConversationId } = useWindowTabsContext();
   const {
     conversations,
-    activeConversationId,
+    activeConversationId: globalActiveConversationId,
     setActiveConversation,
     openConversationTab,
     closeConversationTab,
@@ -102,7 +106,12 @@ export function WorkspaceConversationProvider({ children, onOpenConversation }: 
 
   const [vaultFileTreeFilter, setVaultFileTreeFilter] = useState<"markdown" | "all">("markdown");
 
-  const currentConversation = conversations[activeConversationId];
+  const isWorkspaceRoute = location.pathname === "/workspace";
+  const effectiveConversationId = isWorkspaceRoute
+    ? (activeTabConversationId ?? "")
+    : globalActiveConversationId;
+
+  const currentConversation = conversations[effectiveConversationId];
   const pendingVaultProposal = currentConversation?.pendingVaultProposal ?? null;
   const pendingVaultPaths = useMemo(
     () => new Set(pendingVaultProposal?.changes.map((c) => c.path) ?? []),
@@ -118,11 +127,11 @@ export function WorkspaceConversationProvider({ children, onOpenConversation }: 
   useEffect(() => {
     if (currentConversation?.kind !== "vault" || !currentConversation.vaultRootPath) return;
     void refreshVaultDiskPaths();
-  }, [currentConversation?.kind, currentConversation?.vaultRootPath, activeConversationId, refreshVaultDiskPaths]);
+  }, [currentConversation?.kind, currentConversation?.vaultRootPath, effectiveConversationId, refreshVaultDiskPaths]);
 
   useEffect(() => {
     setVaultFileTreeFilter("markdown");
-  }, [activeConversationId]);
+  }, [effectiveConversationId]);
 
   const fileNames = useMemo(() => {
     if (!currentConversation) return [];
@@ -195,8 +204,8 @@ export function WorkspaceConversationProvider({ children, onOpenConversation }: 
 
   const value: WorkspaceConversationContextValue = {
     conversationList,
-    activeConversationId,
-    workspaceMissingConversation: !currentConversation,
+    activeConversationId: effectiveConversationId,
+    workspaceMissingConversation: isWorkspaceRoute && !currentConversation,
     openConversationTabs,
     allConversationTabs,
     activeConversationTabId: activeConversationTabId || activeConversationTab?.id || "",
@@ -262,7 +271,7 @@ export function WorkspaceConversationProvider({ children, onOpenConversation }: 
       setFileContent("diagrams/preview.png", dataUrl);
     },
     openChatFolderInExplorer: () => {
-      const id = activeConversationId;
+      const id = effectiveConversationId;
       if (!id) return;
       void chatWorkspaceService.openChatFolder(id);
     },

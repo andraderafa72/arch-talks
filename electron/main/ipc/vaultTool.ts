@@ -51,10 +51,11 @@ import {
   formatVaultStructureReport,
   validateVaultIngestionPlan,
 } from "../../vault/vaultStructure.ts";
-import { buildVaultConsumptionPrompt } from "../chatPrompts.ts";
+import { buildVaultConsumptionPrompt, buildVaultConsumptionPromptSegments } from "../chatPrompts.ts";
 import { runLocalAiChat, vaultChatReplyTimeout } from "../localAiRuntime.ts";
 import type { LocalAiSelection } from "../../../src/renderer/types/electron-api.ts";
 import { listVaultConsumptionSkills } from "../../vault/vaultConsumptionSkillsIo.ts";
+import { resolveSystemPrompt } from "../resolveSystemPrompt.ts";
 
 function sanitizeFolderName(name: string): string {
   const trimmed = name.trim().replace(/[/\\]+/g, "-");
@@ -345,6 +346,7 @@ export function registerVaultToolIpc(): void {
         : undefined;
 
     const ingestionCtx = {
+      documentId: documentId.trim(),
       sessionKey,
       category: vaultCategory,
       semanticSkills,
@@ -433,12 +435,20 @@ export function registerVaultToolIpc(): void {
       mergedFiles = { ...diskFiles, ...files };
     }
 
-    const systemPrompt = buildVaultConsumptionPrompt({
+    const promptOptions = {
       skillContent: skill.content,
       skillName: skill.name,
       vaultName: typeof vaultName === "string" ? vaultName : undefined,
       activeFile,
       files: mergedFiles,
+    };
+    const defaultPrompt = buildVaultConsumptionPrompt(promptOptions);
+    const systemPrompt = await resolveSystemPrompt({
+      documentId: documentId.trim(),
+      promptId: "vault.consumption",
+      defaultPrompt,
+      segments: buildVaultConsumptionPromptSegments(promptOptions),
+      placeholders: { activeFile },
     });
 
     const stream =
@@ -493,7 +503,7 @@ export function registerVaultToolIpc(): void {
       throw new Error("No confirmed changes to apply");
     }
 
-    let resolvedPlan = plan;
+    const resolvedPlan = plan;
     if (resolvedPlan) {
       const validation = validateVaultIngestionPlan(resolvedPlan, existing);
       if (!validation.ok) {

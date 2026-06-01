@@ -8,7 +8,9 @@ import { ChevronDown } from "lucide-react";
 
 type ConversationPickerProps = {
   conversations: Conversation[];
-  activeConversationId: string;
+  selectedConversationId?: string;
+  isPlaceholder: boolean;
+  placeholderLabel: string;
   templates: TechnicalTemplate[];
   locale: UiLocale;
   onSelect: (id: string) => void;
@@ -16,7 +18,9 @@ type ConversationPickerProps = {
 
 export function ConversationPicker({
   conversations,
-  activeConversationId,
+  selectedConversationId,
+  isPlaceholder,
+  placeholderLabel,
   templates,
   locale,
   onSelect,
@@ -25,9 +29,12 @@ export function ConversationPicker({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeConversationId),
-    [activeConversationId, conversations],
+  const selectedConversation = useMemo(
+    () =>
+      selectedConversationId
+        ? conversations.find((conversation) => conversation.id === selectedConversationId)
+        : undefined,
+    [conversations, selectedConversationId],
   );
 
   useEffect(() => {
@@ -47,8 +54,8 @@ export function ConversationPicker({
     };
   }, [open]);
 
-  const triggerLabel = activeConversation?.title ?? t.noConversations;
-  const triggerKind = activeConversation?.kind;
+  const triggerLabel = isPlaceholder ? placeholderLabel : (selectedConversation?.title ?? placeholderLabel);
+  const triggerKind = isPlaceholder ? undefined : selectedConversation?.kind;
 
   return (
     <div ref={wrapRef} className="relative z-[100] min-w-0 shrink">
@@ -58,7 +65,7 @@ export function ConversationPicker({
           "inline-flex h-9 min-w-0 max-w-[10rem] items-center gap-2 rounded-md border border-[var(--ui-header-btn-border)] bg-[var(--ui-header-btn-bg)] px-2.5 text-sm text-[var(--ui-header-btn-fg)] transition-colors hover:bg-[var(--ui-header-btn-hover-bg)] sm:max-w-[14rem]",
           open &&
             "border-[var(--ui-header-btn-active-border)] bg-[var(--ui-header-btn-active-bg)] text-[var(--ui-header-btn-active-fg)]",
-          conversations.length === 0 && "text-[var(--ui-popover-muted-fg)]",
+          (isPlaceholder || conversations.length === 0) && "text-[var(--ui-popover-muted-fg)]",
         )}
         aria-expanded={open}
         aria-haspopup="listbox"
@@ -95,7 +102,7 @@ export function ConversationPicker({
                 conversation={conversation}
                 templates={templates}
                 locale={locale}
-                isActive={conversation.id === activeConversationId}
+                isActive={!isPlaceholder && conversation.id === selectedConversationId}
                 activeLabel={locale === "pt" ? "Ativo" : "Active"}
                 variant="compact"
                 onSelect={() => {

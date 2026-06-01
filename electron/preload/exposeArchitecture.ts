@@ -7,11 +7,16 @@ export function exposeArchitectureApis(): Pick<
   | "readArchitectureTemplates"
   | "writeArchitectureConversations"
   | "writeArchitectureTemplates"
+  | "listUiThemes"
+  | "writeUiTheme"
+  | "deleteUiTheme"
+  | "migrateEmbeddedUiThemes"
   | "getArchitectureDataDir"
   | "readDocumentIndex"
   | "writeDocumentIndex"
   | "readDocumentFiles"
   | "writeDocumentFiles"
+  | "deleteDocument"
   | "chatLoad"
   | "chatSave"
   | "chatListFilesTree"
@@ -29,6 +34,11 @@ export function exposeArchitectureApis(): Pick<
       ipcRenderer.invoke("architecture:writeConversations", doc),
     writeArchitectureTemplates: (doc: { items: unknown[] }): Promise<void> =>
       ipcRenderer.invoke("architecture:writeTemplates", doc),
+    listUiThemes: (): Promise<unknown[]> => ipcRenderer.invoke("architecture:listUiThemes"),
+    writeUiTheme: (theme: unknown): Promise<void> => ipcRenderer.invoke("architecture:writeUiTheme", theme),
+    deleteUiTheme: (id: string): Promise<void> => ipcRenderer.invoke("architecture:deleteUiTheme", id),
+    migrateEmbeddedUiThemes: (themes: unknown[]): Promise<number> =>
+      ipcRenderer.invoke("architecture:migrateEmbeddedUiThemes", themes),
     getArchitectureDataDir: (): Promise<string> => ipcRenderer.invoke("architecture:getDataDir"),
     readDocumentIndex: (documentId: string) => ipcRenderer.invoke("document:readIndex", documentId),
     writeDocumentIndex: (documentId: string, index: unknown) =>
@@ -36,6 +46,8 @@ export function exposeArchitectureApis(): Pick<
     readDocumentFiles: (documentId: string) => ipcRenderer.invoke("document:readFiles", documentId),
     writeDocumentFiles: (documentId: string, files: Record<string, string>) =>
       ipcRenderer.invoke("document:writeFiles", { documentId, files }),
+    deleteDocument: (documentId: string, options?: { deleteExternalRoot?: boolean }) =>
+      ipcRenderer.invoke("document:delete", { documentId, deleteExternalRoot: options?.deleteExternalRoot }),
     chatLoad: (documentId: string, chatId: string) => ipcRenderer.invoke("chat:load", { documentId, chatId }),
     chatSave: (documentId: string, chatId: string, detail: unknown) =>
       ipcRenderer.invoke("chat:save", { documentId, chatId, detail }),
